@@ -6,7 +6,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: l2l-feed
+  group: tracker-data
   cancel-in-progress: false
 jobs:
   pull:

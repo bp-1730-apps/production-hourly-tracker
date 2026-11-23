@@ -1,0 +1,35 @@
+name: Archive L2L history
+on:
+  schedule:
+    - cron: "30 14 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "How many days back to save (3 = normal, 365 = whole year)"
+        default: "3"
+permissions:
+  contents: write
+concurrency:
+  group: tracker-data
+  cancel-in-progress: false
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+      - name: Save L2L actuals (read only)
+        env:
+          L2L_KEY: ${{ secrets.L2L_KEY }}
+          ARCH_DAYS: ${{ github.event.inputs.days || '3' }}
+        run: python3 l2l_archive.py
+      - name: Save data files
+        run: |
+          if [ -n "$(git status --porcelain data)" ]; then
+            git config user.name "l2l-feed"
+            git config user.email "l2l-feed@users.noreply.github.com"
+            git add data
+            git commit -m "L2L history"
+            git pull --rebase -q
+            git push
+          fi
