@@ -208,7 +208,7 @@ var DEF_UPC={"005307":12,"005415":6,"008184":6,"005305":12,"005306":12,"005375":
 var STORE="hourly_tracker_html_v2", OLDSTORE="hourly_tracker_html_v1";
 var S={syncLast:"",syncMig:0,capH:20,plans:{},shift:{},acts:{},dones:{},notes:{},running:{},upc:{},l2l:{},stamp:""};
 var REMOTE={}, RECENT={}, ARCH={}, IDX={}, HLOAD={}, TR={from:"",to:"",group:"week",metric:"sched",busy:false,msg:"",once:false};
-var showAllChips=false,SEL={};
+var showAllChips=false,SEL={},ARCHM={},TRMISS={};
 var AUTO={}, STATS={}, MISSING={}, tab="Board", view="auto", l2lAt=null, l2lErr="", feedUpdated="", schedErr="", pulling=false, rT=null;
 
 // ---------- helpers
@@ -479,7 +479,7 @@ function dayMadeUntimed(line,date){
 function untimedMetrics(date,line){
   var all=allRunsOf(line,date),sched=0;all.forEach(function(r){sched+=r.need});
   var mm=dayMadeUntimed(line,date);
-  return {sched:sched,hrs:lineHrs(line,date),made:mm.cases,hw:0,ok:0,okN:0,ea:0,et:0,runs:all.length,has:mm.cases>0,untimed:1};
+  return {sched:sched,hrs:lineHrs(line,date),made:mm.cases,hw:0,ok:0,okN:0,ea:0,et:0,runs:all.length,has:mm.cases>0,untimed:1,missing:mm.missing};
 }
 function applyAll(){
   MISSING={};STATS={};buildIdx();
@@ -525,11 +525,14 @@ async function loadHistory(plansOnly){
     try{var j=await getJson("data/plans-"+m+".json");
       Object.keys(j.plans||{}).forEach(function(d){if(!RECENT[d])REMOTE[d]=j.plans[d]});gp++}catch(e){}
     if(!plansOnly)try{var a=await getJson("data/l2l-"+m+".json");
+      ARCHM[m]=0;
       Object.keys(a.lines||{}).forEach(function(l){
+        ARCHM[m]+=a.lines[l].length;
         var byDay=ARCH[l]=ARCH[l]||{};
         Object.keys(byDay).forEach(function(d){if(d.slice(0,7)===m)delete byDay[d]});
         a.lines[l].forEach(function(r){var d=r[0].slice(0,10);(byDay[d]=byDay[d]||[]).push({pitch_start:r[0],pitch_end:r[1]||null,actual:r[2],actual_product_code:r[3]})});
       });ga++}catch(e){}
+    if(!plansOnly&&ARCHM[m]==null)ARCHM[m]=0;
     HLOAD[hk]=Date.now();
   }
   TR.busy=false;
@@ -552,14 +555,19 @@ function dayMetrics(date,line,t){
 }
 // one record per day and line inside the chosen dates
 function dailyData(){
-  var t=thr(),out=[];out.days=[];
+  var t=thr(),out=[];out.days=[];out.miss={};out.recDays={};out.cntDays={};TRMISS={};
   allDates().forEach(function(d){
     if(d<TR.from||d>TR.to)return;
     out.days.push(d);
-    applyL2L(d,{});
+    var mm={};applyL2L(d,mm);out.miss[d]=mm;
     TRACKED.forEach(function(l){
+      if(IDX[l]&&IDX[l][d]&&IDX[l][d].length)out.recDays[d]=1;
       if(!allRunsOf(l,d).length)return;
-      var m=runsSorted(l,d).length?dayMetrics(d,l,t):untimedMetrics(d,l);m.date=d;m.line=l;out.push(m)});
+      var m=runsSorted(l,d).length?dayMetrics(d,l,t):untimedMetrics(d,l);m.date=d;m.line=l;
+      if(m.has)out.cntDays[d]=1;
+      (m.missing||[]).forEach(function(k){mm[k]=1});
+      out.push(m)});
+    Object.keys(mm).forEach(function(k){if(/^\d+$/.test(k))TRMISS[k]=1});
   });
   return out;
 }
@@ -607,6 +615,13 @@ function buildTrends(){
   h+='<button class="btn" id="bTr">Reload</button><button class="btn pri" id="bExp">Export Excel</button></div>';
   h+='<div class="sub" style="margin:6px 0">'+esc(TR.msg)+'</div>';
   var data=dailyData(),keys={},byKL={};
+  var cov={};
+  data.days.forEach(function(d){var mo=d.slice(0,7),c=cov[mo]=cov[mo]||{days:0,rec:0,cnt:0,miss:{}};c.days++;if(data.recDays[d])c.rec++;if(data.cntDays[d])c.cnt++;Object.keys(data.miss[d]||{}).forEach(function(k){if(/^\d+$/.test(k))c.miss[k]=1})});
+  var covKeys=Object.keys(cov).sort(),weak=covKeys.some(function(mo){return cov[mo].cnt<cov[mo].days});
+  h+='<details class="hu"'+(weak?' open':'')+'><summary>Data coverage by month'+(weak?' <span style="font-weight:400;color:var(--muted)">(some months have days without counts)</span>':'')+'</summary><div class="tw"><table class="hr" style="margin-top:0"><thead><tr><th>MONTH</th><th class="c">SCHEDULE DAYS</th><th class="c">DAYS WITH L2L RECORDS</th><th class="c">DAYS WITH COUNTS</th><th class="c">L2L FILE SAVED</th><th>UNITS PER CASE MISSING FOR</th></tr></thead><tbody>';
+  covKeys.forEach(function(mo){var c=cov[mo],mk=Object.keys(c.miss).sort();
+    h+='<tr><td><b>'+mo+'</b></td><td style="text-align:center">'+c.days+'</td><td style="text-align:center">'+c.rec+'</td><td style="text-align:center">'+c.cnt+'</td><td style="text-align:center">'+(ARCHM[mo]>0?'yes ('+fmt(ARCHM[mo])+' records)':'<span style="color:var(--badfg);font-weight:700">no</span>')+'</td><td class="sub">'+(mk.length?esc(mk.slice(0,14).join(", ")+(mk.length>14?" ... +"+(mk.length-14):"")):"")+'</td></tr>'});
+  h+='</tbody></table></div><div class="hint" style="padding:0 0 8px">A day shows in the charts with counts only if L2L records exist for it AND every product has a units-per-case number. "L2L file saved: no" means the Archive L2L history job has not saved that month yet. For missing units per case use Settings (gear) &gt; Units per case.</div></details>';
   data.forEach(function(m){var k=groupKey(m.date);keys[k]=1;(byKL[k+"|"+m.line]=byKL[k+"|"+m.line]||[]).push(m)});
   keys=Object.keys(keys).sort();
   var keyDays={};data.days.forEach(function(d){var k=groupKey(d);keyDays[k]=(keyDays[k]||0)+1});
@@ -996,7 +1011,8 @@ function modal(html){$("modal").innerHTML='<div class="modal" id="mbg"><div clas
 function upcDialog(){
   var d=curDate(),codes={};
   if(d)TRACKED.forEach(function(l){runsSorted(l,d).forEach(function(r){if(k6(r.item))codes[k6(r.item)]=r.name})});
-  Object.keys(MISSING[d]||{}).forEach(function(m){if(/^\d+$/.test(m)&&!(m in codes))codes[m]=""});
+  Object.keys(MISSING[d]||{}).concat(Object.keys(TRMISS)).forEach(function(m){if(/^\d+$/.test(m)&&!(m in codes)){codes[m]="";
+    allDates().some(function(dd){return TRACKED.some(function(l){return allRunsOf(l,dd).some(function(r){if(k6(r.item)===m){codes[m]=r.name;return true}})})})}});
   var h='<h3>Units per case</h3><div class="sub">How many units are in one case, per product (last 6 digits of the item code). Red = still needed. Saved on this device only.</div><table class="upc" style="margin-top:8px">';
   Object.keys(codes).sort().forEach(function(k){var u=upcOf(k);
     h+='<tr><td><b>'+k+'</b></td><td class="sub">'+esc(codes[k].slice(0,50))+'</td><td><input data-upc="'+k+'" value="'+(u||"")+'" class="'+(u?"":"need")+'"></td></tr>'});
