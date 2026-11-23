@@ -1,0 +1,31 @@
+name: Read schedule
+on:
+  push:
+    paths:
+      - "**/*.xlsb"
+      - "**/*.xlsx"
+      - "**/*.xlsm"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: tracker-data
+  cancel-in-progress: false
+jobs:
+  schedule:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - run: python3 make_schedule.py
+      - name: Save schedule.json
+        run: |
+          if [ -n "$(git status --porcelain schedule.json data)" ]; then
+            git config user.name "tracker-bot"
+            git config user.email "tracker-bot@users.noreply.github.com"
+            git add schedule.json data
+            git commit -m "Update schedule.json"
+            git pull --rebase
+            git push
+          fi

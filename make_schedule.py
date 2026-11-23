@@ -1,6 +1,6 @@
 """Reads the weekly schedule workbook (.xlsb or .xlsx, sheet SCHEDULE) and saves schedule.json for the Hourly Tracker page.
 Run by the GitHub workflow whenever the workbook in the repo changes. Needs only Python 3 (standard library)."""
-import glob, json, os, re, struct, sys, zipfile, datetime
+import glob, json, os, re, struct, subprocess, sys, zipfile, datetime
 import xml.etree.ElementTree as ET
 ALL = ["2A", "PXM6", "PL1", "MP4", "PL2", "2E"]
 
@@ -173,6 +173,29 @@ def parse_schedule(rows, week=None):
             cols["start"] = e - 1
     if cols["prod"] < 0 or cols["need"] < 0:
         raise ValueError("Could not find the PRODUCT / CASES NEEDED headers.")
+    extra = {}                                     # other columns worth showing: field name -> column
+    for r in keys:
+        d = rows[r]
+        for c, v in sorted(d.items()):
+            if not isinstance(v, str):
+                continue
+            u = v.strip().upper()
+            f = ("form" if u == "FORMULA#" else "po" if u.startswith("PROCESS ORDER") else "batches" if u.startswith("# OF BATCHES")
+                 else "lbs" if u.startswith("TOTAL LBS") else "cmt" if u == "COMMENT" else "pack" if u == "PACK SIZE"
+                 else "info" if u == "ADDITIONAL INFO" else "shift" if u == "SHIFT" else None)
+            if f and f not in extra:
+                extra[f] = c
+    def extras(d):
+        o = {}
+        for f, c in extra.items():
+            v = d.get(c)
+            if isinstance(v, float):
+                v = int(v) if v == int(v) else round(v, 2)
+            elif isinstance(v, str):
+                v = v.strip()
+            if v not in (None, "", 0):
+                o[f] = v
+        return o
     heads = [r for r in keys if _colof(rows[r], "LINE:") >= 0]
     out, skipped = {}, 0
     for bi, r in enumerate(heads):
@@ -203,12 +226,12 @@ def parse_schedule(rows, week=None):
             if cols["start"] >= 0:
                 s, e = d.get(cols["start"]), d.get(cols["start"] + 1)
                 if isinstance(s, float) and isinstance(e, float) and e > s and s < 2:
-                    add(out[key], dict(item=it, name=p.strip(), s=s * 1440, e=e * 1440, need=need, std=std, hrs=hrs))
+                    add(out[key], dict(item=it, name=p.strip(), s=s * 1440, e=e * 1440, need=need, std=std, hrs=hrs, **extras(d)))
                     continue
                 if cols["start"] >= 0 and (isinstance(s, float) or isinstance(e, float)):
                     continue
             if need > 0:                                   # no times in this layout: keep the daily total
-                add(out[key], dict(item=it, name=p.strip(), s=None, e=None, need=need, std=std, hrs=hrs))
+                add(out[key], dict(item=it, name=p.strip(), s=None, e=None, need=need, std=std, hrs=hrs, **extras(d)))
     out["_skipped"] = skipped
     return out
 
@@ -233,15 +256,30 @@ def week_of(path):
 
 
 def rounded(runs):
-    return [dict(item=r["item"], name=r["name"], s=None if r["s"] is None else round(r["s"], 3), e=None if r["e"] is None else round(r["e"], 3), need=round(r["need"], 2),
-                 std=round(r["std"], 2), hrs=round(r["hrs"], 4)) for r in runs]
+    out = []
+    for r in runs:
+        o = dict(r)
+        o["s"] = None if r["s"] is None else round(r["s"], 3)
+        o["e"] = None if r["e"] is None else round(r["e"], 3)
+        o["need"], o["std"], o["hrs"] = round(r["need"], 2), round(r["std"], 2), round(r["hrs"], 4)
+        out.append(o)
+    return out
+
+
+def commit_time(p):
+    """When the file was last uploaded (git commit time), so the newest upload wins. 0 if git history is not available."""
+    try:
+        out = subprocess.run(["git", "log", "-1", "--format=%ct", "--", p], capture_output=True, text=True, timeout=30).stdout.strip()
+        return int(out) if out else 0
+    except Exception:
+        return 0
 
 
 def pick_files():
     files = sorted(set(glob.glob("*.xls*") + glob.glob("**/*.xls*", recursive=True)))
-    def order(p):                                  # copies first, so the original of the same week wins
+    def order(p):                                  # oldest upload first, newest last (last one wins); ties: copies first, then name
         b = os.path.basename(p)
-        return (0 if b.lower().startswith("copy of") else 1, p)
+        return (commit_time(p), 0 if b.lower().startswith("copy of") else 1, p)
     return sorted(files, key=order)
 
 
