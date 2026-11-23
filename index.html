@@ -464,12 +464,12 @@ function lineStatus(line,date,t){
   var thru=Math.max(last,dn);
   if(thru<0)return {cls:"none",head:(live&&now<shift)?"Shift starts at "+clock(shift):"No hourly actuals yet",mt:"",info:info,nums:null};
   var A=res.hours[thru].A,SS=res.hours[thru].S,expC=0,actC=0;
-  for(ri=0;ri<runs.length;ri++){actC+=A[ri];expC+=(res.dn[ri]!=null&&res.dn[ri]<=thru)?A[ri]:Math.min(SS[ri],runs[ri].need)}
+  for(ri=0;ri<runs.length;ri++){actC+=A[ri];expC+=res.dn[ri]!=null?A[ri]:Math.min(SS[ri],runs[ri].need)}
   var overdue=[];
   for(i=0;i<=thru;i++)if(res.hours[i].prods.some(function(q){return q.act==null&&q.exp>=0.5&&!q.done}))overdue.push(hr(res.hours[i].hs)+"-"+hr(res.hours[i].he));
   expC=rnd(expC);var diff=actC-expC,tol=(1-t)*expC;
   var nums={act:actC,exp:expC,thru:hr(res.hours[thru].hs)+"-"+hr(res.hours[thru].he),exp_now:null,part:null,hour_exp:null,hour_label:""};
-  var raw=[],net,bn="",lastE=0;for(ri=0;ri<runs.length;ri++){var e1=(res.dn[ri]!=null&&res.dn[ri]<=thru)?A[ri]:Math.min(SS[ri],runs[ri].need);raw.push(runMin(runs[ri],e1-A[ri]));lastE=Math.max(lastE,pend(runs[ri]))}
+  var raw=[],net,bn="",lastE=0;for(ri=0;ri<runs.length;ri++){var e1=res.dn[ri]!=null?A[ri]:Math.min(SS[ri],runs[ri].need);raw.push(runMin(runs[ri],e1-A[ri]));lastE=Math.max(lastE,pend(runs[ri]))}
   net=applyBrk(raw,brkCredit(runs[0].s,Math.min(res.hours[thru].he,lastE)));bn=brkNote(raw,net);var tmin=net.reduce(function(a,b){return a+b},0);
   var mins=rnd(Math.abs(tmin)),tm=mins>=60?Math.floor(mins/60)+" hr "+(mins%60)+" min":mins+" min",cls,head,mt;
   if(diff>=0){cls="ahead";head="AHEAD +"+fmt(rnd(diff))+" cases";mt=mins>=1?"about "+tm+" ahead":""}
@@ -1289,8 +1289,9 @@ function fsToday(){
   TRACKED.forEach(function(l){
     if((FS.line!=="ALL"&&l!==FS.line)||!runsSorted(l,d).length)return;
     any=true;var res=engine(l,d),last=res.hours[NH-1];
-    var gm=res.runs.map(function(r,ri){return runMin(r,(idx>=0?res.hours[idx].S[ri]:0)-last.A[ri])}),sm=applyBrk(gm,brkCredit(res.runs[0].s,Math.min(now,Math.max.apply(null,res.runs.map(pend)))));BRK=BRK+(brkNote(gm,sm)?gm.reduce(function(a,x){return a+(x>0?x:0)},0)-sm.reduce(function(a,x){return a+(x>0?x:0)},0):0);
-    res.runs.forEach(function(r,ri){var k=k6(r.item)||r.item,p=P[k]=P[k]||{name:r.name,day:0,made:0,now:0,min:0,lines:{}},due=idx>=0?res.hours[idx].S[ri]:0,mn=sm[ri];
+    var dueOf=function(ri){return res.dn[ri]!=null?last.A[ri]:(idx>=0?res.hours[idx].S[ri]:0)},   // a run marked complete is closed: nothing is owed on it
+    gm=res.runs.map(function(r,ri){return runMin(r,dueOf(ri)-last.A[ri])}),sm=applyBrk(gm,brkCredit(res.runs[0].s,Math.min(now,Math.max.apply(null,res.runs.map(pend)))));BRK=BRK+(brkNote(gm,sm)?gm.reduce(function(a,x){return a+(x>0?x:0)},0)-sm.reduce(function(a,x){return a+(x>0?x:0)},0):0);
+    res.runs.forEach(function(r,ri){var k=k6(r.item)||r.item,p=P[k]=P[k]||{name:r.name,day:0,made:0,now:0,min:0,lines:{}},due=dueOf(ri),mn=sm[ri];
       p.day+=r.need;p.made+=last.A[ri];p.now+=due;p.min+=mn;LM[l]=(LM[l]||0)+mn;p.lines[l]=1})});
   var h='';
   if(!any)return {any:false,h:'<div class="card note-card">Nothing is scheduled with times for today ('+pretty(d)+'), so there is no live compliance. Use This week or Last 4 weeks for finished days.</div>'};
@@ -1359,11 +1360,11 @@ function buildManual(date){
   h+='<div class="sub" style="margin-bottom:8px">Type the total cases made so far for each product if L2L is wrong. It replaces L2L for that product until you clear it, and tick <b>Completed</b> when the run is finished. Day: <b>'+dayname(date)+' '+pretty(date)+'</b> (change it with the date box at the top).</div>';
   h+='<div class="seg">'+TRACKED.map(function(x){return '<button class="'+(x===l?'on':'')+'" data-mcline="'+x+'">'+x+'</button>'}).join("")+'</div>';
   if(!runsSorted(l,date).length)return h+'<div class="card note-card">'+l+' has no hourly schedule on this day.</div>';
-  var res=engine(l,date),now=nowRel(date),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),last=res.hours[NH-1],rows='',T={need:0,due:0,made:0},nman=0,gm=res.runs.map(function(r,ri){return runMin(r,(idx>=0?res.hours[idx].S[ri]:0)-last.A[ri])}),sm=applyBrk(gm,brkCredit(res.runs[0].s,Math.min(now,Math.max.apply(null,res.runs.map(pend))))),bnote=brkNote(gm,sm);
+  var res=engine(l,date),now=nowRel(date),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),last=res.hours[NH-1],rows='',T={need:0,due:0,made:0},nman=0,dueOf=function(ri){return res.dn[ri]!=null?last.A[ri]:(idx>=0?res.hours[idx].S[ri]:0)},gm=res.runs.map(function(r,ri){return runMin(r,dueOf(ri)-last.A[ri])}),sm=applyBrk(gm,brkCredit(res.runs[0].s,Math.min(now,Math.max.apply(null,res.runs.map(pend))))),bnote=brkNote(gm,sm);
   res.runs.forEach(function(r,ri){
     var hasM=mrKey(date,l,ri) in S.mrun,l2l=0,hasL=false;
     for(var hh=0;hh<NH;hh++){var k=akey(date,l,hh,ri);if(k in AUTO){l2l+=AUTO[k];hasL=true}}
-    var made=last.A[ri],due=idx>=0?res.hours[idx].S[ri]:0,diff=made-due,dh=doneOf(date,l,ri),started=due>0.5||made>0.5;
+    var made=last.A[ri],due=dueOf(ri),diff=made-due,dh=doneOf(date,l,ri),started=due>0.5||made>0.5;
     T.need+=r.need;T.due+=due;T.made+=made;T.min=(T.min||0)+sm[ri];if(hasM)nman++;
     var st=dh!=null?'<span class="res y">COMPLETED</span>':(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'on pace':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')+'<div class="sub">'+fmtMin(diff>0?runMin(r,diff):sm[ri])+(diff>0?' ahead':' behind')+'</div>'));
     rows+='<tr'+(hasM?' class="ov-on"':'')+'><td class="pc" style="border-left:5px solid '+prodColor(r.item)[1]+'"><b>'+esc(String(r.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,44))+'<div class="sub">'+(r.s!=null?clock(r.s)+' - '+clock(r.e):'')+'</div></td>'+
