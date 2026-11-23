@@ -913,7 +913,85 @@ function tabDot(l,date,t){
   if(!date||!runsSorted(l,date).length)return "";
   var c=lineStatus(l,date,t).cls;return c==="none"?"":c;
 }
-var LAST={t:"",m:""};function sigNow(){return tab+"|"+curDate()+"|"+FS.sec+"|"+TR.sec+"|"+MC.line}
+
+// ---------- Demand: cases the weekly schedules call for, per product per week
+var DM={sec:"ov",line:"ALL",wks:13,sort:"vol",q:""};
+function demandData(){
+  var wk={},prod={},curMon=mondayOf(opDay()),dates=allDates().slice().sort();
+  dates.forEach(function(d){var mon=mondayOf(d);
+    TRACKED.forEach(function(l){if(DM.line!=="ALL"&&l!==DM.line)return;
+      allRunsOf(l,d).forEach(function(r){if(!(r.need>0))return;
+        var k=k6(r.item)||String(r.item),P=prod[k]=prod[k]||{k:k,name:r.name||"",w:{}};
+        if(r.name)P.name=r.name;P.w[mon]=(P.w[mon]||0)+r.need;wk[mon]=(wk[mon]||0)+r.need})})});
+  var mons=Object.keys(wk).sort();if(!mons.length)return {weeks:[],prod:[],tot:null};
+  var weeks=[],m=mons[0];while(m<=mons[mons.length-1]){weeks.push(m);m=addDays(m,7)}
+  var all=weeks.slice(),n=DM.wks;weeks=weeks.slice(-n);
+  var fw=all.filter(function(x){return x<curMon}),cw=fw.filter(function(x){return wk[x]>0}),miss=weeks.filter(function(x){return x<curMon&&!(wk[x]>0)});       // finished weeks that have a schedule
+  function trend(get){
+    var have=function(x){return wk[x]>0},rec=fw.slice(-4).filter(have),pri=fw.slice(-8,-4).filter(have);
+    var avg=function(a){return a.length?a.reduce(function(s,x){return s+get(x)},0)/a.length:0};
+    var ra=avg(rec),pa=avg(pri),o={ra:ra,pa:pa,d:ra-pa,pct:null,st:"na",last:cw.length?get(cw[cw.length-1]):0,nr:rec.length,np:pri.length};
+    if(rec.length<2||pri.length<2){o.st="na";return o}
+    if(pa<=0&&ra>0){o.st="new";return o}
+    if(pa<=0){o.st="flat";return o}
+    o.pct=(ra-pa)/pa;o.st=o.pct>=.10?"up":o.pct<=-.10?"down":"flat";return o;
+  }
+  var list=Object.keys(prod).map(function(k){var P=prod[k];P.t=trend(function(x){return P.w[x]||0});P.tot=weeks.reduce(function(s,x){return s+(P.w[x]||0)},0);return P}).filter(function(P){return P.tot>0||P.t.ra>0||P.t.pa>0});
+  return {weeks:weeks,all:all,cw:cw,miss:miss,curMon:curMon,wk:wk,prod:list,tot:trend(function(x){return wk[x]||0})};
+}
+function dmChip(t){
+  var m={up:["c-ok","Increasing"],down:["c-bad","Decreasing"],flat:["c-mut","Steady"],"new":["c-warn","New"],na:["c-none","Not enough weeks"]}[t.st];
+  return '<span class="pl '+m[0]+'">'+m[1]+'</span>';
+}
+function dmPct(t){return t.pct==null?(t.st==="new"?"new":"&ndash;"):(t.pct>=0?"+":"")+(t.pct*100).toFixed(0)+"%"}
+function dmSpark(vals){
+  var W=110,H=26,mx=Math.max.apply(null,vals.concat([1])),p=vals.map(function(v,i){return (vals.length<2?0:i*(W-4)/(vals.length-1)+2).toFixed(1)+","+(H-3-(v/mx)*(H-6)).toFixed(1)});
+  return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="vertical-align:middle"><polyline fill="none" stroke="#2f6fb0" stroke-width="1.8" stroke-linejoin="round" points="'+p.join(" ")+'"/><circle cx="'+p[p.length-1].split(",")[0]+'" cy="'+p[p.length-1].split(",")[1]+'" r="2.4" fill="#2f6fb0"/></svg>';
+}
+function dmChart(D){
+  var W=760,H=230,L=52,B=28,T=12,R=10,ws=D.weeks,n=ws.length,mx=Math.max.apply(null,ws.map(function(x){return D.wk[x]||0}).concat([1])),
+  step=Math.pow(10,Math.floor(Math.log10(mx))),top=Math.ceil(mx/step)*step,bw=(W-L-R)/n,s='';
+  for(var g=0;g<=4;g++){var v=top*g/4,y=H-B-(H-B-T)*g/4;s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" stroke="#dde3ec"/><text x="'+(L-6)+'" y="'+(y+4)+'" font-size="11" text-anchor="end" fill="#6a7889">'+fmt(rnd(v))+'</text>'}
+  var ma=[];
+  ws.forEach(function(x,i){var v=D.wk[x]||0,part=x>=D.curMon,h=(H-B-T)*v/top,xx=L+i*bw;
+    s+='<rect x="'+(xx+bw*.12).toFixed(1)+'" y="'+(H-B-h).toFixed(1)+'" width="'+(bw*.76).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="4" fill="#2f6fb0" opacity="'+(part?.3:.75)+'"'+(part?' stroke="#2f6fb0" stroke-dasharray="3 3"':'')+'><title>Week of '+pretty(x)+': '+fmt(rnd(v))+' cases'+(part?' (week not finished)':'')+'</title></rect>';
+    if(n<=16||i%Math.ceil(n/12)===0)s+='<text x="'+(xx+bw/2).toFixed(1)+'" y="'+(H-8)+'" font-size="10" text-anchor="middle" fill="#6a7889">'+pretty(x).slice(0,5)+'</text>';
+    if(!part&&v>0){var k=D.cw.indexOf(x),a=D.cw.slice(Math.max(0,k-3),k+1);ma.push((xx+bw/2).toFixed(1)+","+(H-B-(H-B-T)*(a.reduce(function(t,q){return t+(D.wk[q]||0)},0)/a.length)/top).toFixed(1))}});
+  if(ma.length>1)s+='<polyline fill="none" stroke="#e0a100" stroke-width="2.5" stroke-linejoin="round" points="'+ma.join(" ")+'"/>';
+  return '<div class="card tw" style="padding:10px"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:560px;height:auto">'+s+'</svg><div class="sub" style="padding:2px 6px">Bars = cases demanded that week (faded dashed bar = current week, not finished). Gold line = 4-week moving average.</div></div>';
+}
+function buildDemand(){
+  var h='<h2>Demand by week</h2><div class="sub" style="margin-bottom:8px">Demand = cases the weekly schedules call for (cases required, summed over every run), Monday to Sunday. It is what was planned to be made, not shipped orders. The current week is not finished, so it is left out of the trend.</div>';
+  var D=demandData();
+  if(!D.weeks.length)return h+'<div class="card note-card">No schedule history loaded yet. Open Trends once or wait a moment for the history to load.</div>';
+  h+='<div class="card tools"><label>LINE</label><select id="dmLine"><option value="ALL">All lines</option>'+TRACKED.map(function(l){return '<option'+(DM.line===l?' selected':'')+'>'+l+'</option>'}).join("")+'</select><label>WEEKS</label><select id="dmWks">'+[8,13,26,52].map(function(n){return '<option value="'+n+'"'+(DM.wks===n?' selected':'')+'>'+n+' weeks</option>'}).join("")+'</select></div>';
+  h+=segNav([["ov","Overview"],["pr","By product"],["gr","Weekly grid"]],DM.sec,"dmsec");
+  var T=D.tot,arrow=T.st==="up"?"&#9650;":T.st==="down"?"&#9660;":"&#9644;";
+  h+='\u0001ov\u0001<div class="kps"><div class="kp"><span class="lab">LAST FULL WEEK</span><b>'+fmt(rnd(T.last))+'</b><span class="sub">cases, week of '+(D.cw.length?pretty(D.cw[D.cw.length-1]).slice(0,5):'-')+'</span></div><div class="kp"><span class="lab">LAST 4 WEEKS</span><b>'+fmt(rnd(T.ra))+'</b><span class="sub">cases per week, average</span></div><div class="kp"><span class="lab">4 WEEKS BEFORE THAT</span><b>'+fmt(rnd(T.pa))+'</b><span class="sub">cases per week, average</span></div><div class="kp"><span class="lab">CHANGE</span><b>'+arrow+' '+dmPct(T)+'</b><span class="sub">'+(T.d>=0?"+":"")+fmt(rnd(T.d))+' cases per week</span></div></div>';
+  h+='<div class="card note-card" style="margin-bottom:10px"><b>'+(T.st==="up"?"Demand is increasing":T.st==="down"?"Demand is decreasing":T.st==="flat"?"Demand is steady":"Not enough finished weeks yet")+'</b>'+(T.st==="na"?'':' &mdash; '+(DM.line==="ALL"?"all lines":DM.line)+' averaged '+fmt(rnd(T.ra))+' cases a week over the last 4 finished weeks vs '+fmt(rnd(T.pa))+' in the 4 weeks before. Up or down counts as a change at 10% or more.')+'</div>';
+  h+=dmChart(D);
+  if(D.miss.length)h+='<div class="hint" style="color:var(--warnfg)">No schedule saved for the week of '+D.miss.map(function(x){return pretty(x).slice(0,5)}).join(', ')+' (shown as empty, left out of the averages). Upload those weeks to fill the gap.</div>';
+  var mv=D.prod.filter(function(P){return P.t.st!=="na"}).slice().sort(function(a,b){return b.t.d-a.t.d}),up=mv.filter(function(P){return P.t.d>0}).slice(0,5),dn=mv.filter(function(P){return P.t.d<0}).reverse().slice(0,5);
+  function lst(a,t){return '<div class="card" style="padding:12px 14px;flex:1;min-width:260px"><b>'+t+'</b>'+(a.length?a.map(function(P){return '<div style="display:flex;gap:8px;justify-content:space-between;padding:5px 0;border-top:1px solid var(--line);margin-top:5px"><span>'+esc(P.k)+' <span class="sub">'+esc(P.name.slice(0,28))+'</span></span><b style="white-space:nowrap">'+(P.t.d>=0?"+":"")+fmt(rnd(P.t.d))+'<span class="sub"> /wk '+dmPct(P.t).replace("&ndash;","")+'</span></b></div>'}).join(""):'<div class="sub">None</div>')+'</div>'}
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px">'+lst(up,"Biggest increases (cases per week)")+lst(dn,"Biggest decreases (cases per week)")+'</div>';
+  // by product
+  var q=DM.q.trim().toLowerCase(),rows=D.prod.filter(function(P){return !q||(P.k+" "+P.name).toLowerCase().indexOf(q)>=0});
+  var by={vol:function(a,b){return b.t.ra-a.t.ra},up:function(a,b){return b.t.d-a.t.d},down:function(a,b){return a.t.d-b.t.d}}[DM.sort]||function(a,b){return b.t.ra-a.t.ra};
+  rows.sort(by);var shown=rows.slice(0,80);
+  h+='\u0001pr\u0001<div class="card tools"><label>FIND</label><input data-k="dmq" value="'+esc(DM.q)+'" placeholder="item or name"><label>SORT</label><select id="dmSort">'+[["vol","Biggest demand"],["up","Biggest increase"],["down","Biggest decrease"]].map(function(o){return '<option value="'+o[0]+'"'+(DM.sort===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select></div>';
+  h+='<div class="card tw"><table class="hr" style="margin:0"><thead><tr><th>PRODUCT</th><th>LAST '+D.weeks.length+' WEEKS</th><th class="c">LAST FULL WEEK</th><th class="c">PRIOR 4-WK AVG</th><th class="c">LAST 4-WK AVG</th><th class="c">CHANGE</th><th>TREND</th></tr></thead><tbody>';
+  shown.forEach(function(P){h+='<tr><td class="pr"><b>'+esc(P.k)+'</b> <span>'+esc(P.name)+'</span></td><td>'+dmSpark(D.weeks.map(function(x){return P.w[x]||0}))+'</td><td style="text-align:center">'+fmt(rnd(P.t.last))+'</td><td style="text-align:center">'+fmt(rnd(P.t.pa))+'</td><td style="text-align:center"><b>'+fmt(rnd(P.t.ra))+'</b></td><td style="text-align:center">'+dmPct(P.t)+'</td><td>'+dmChip(P.t)+'</td></tr>'});
+  h+='</tbody></table></div><div class="hint">'+(rows.length>shown.length?'Showing the top '+shown.length+' of '+rows.length+' products. Use Find to narrow. ':rows.length+' products. ')+'Averages count weeks the product did not run as 0. Change = (last 4-week average - prior 4-week average) / prior average. Increasing or decreasing means a change of 10% or more.</div>';
+  // grid
+  var g=D.prod.slice().sort(function(a,b){return b.tot-a.tot}).slice(0,40);
+  h+='\u0001gr\u0001<div class="card tw"><table class="ov"><tr><th>PRODUCT</th>'+D.weeks.map(function(x){return '<th'+(x>=D.curMon?' class="now"':'')+'>'+pretty(x).slice(0,5)+'</th>'}).join("")+'</tr>';
+  h+='<tr><td class="ln" style="font-size:12px;text-align:left">ALL</td>'+D.weeks.map(function(x){return '<td style="background:#eef2f8"><b style="display:inline">'+fmt(rnd(D.wk[x]||0))+'</b></td>'}).join("")+'</tr>';
+  g.forEach(function(P){var mx=Math.max.apply(null,D.weeks.map(function(x){return P.w[x]||0}).concat([1]));
+    h+='<tr><td style="text-align:left;white-space:nowrap" title="'+esc(P.name)+'"><b style="display:inline">'+esc(P.k)+'</b> <span class="sub">'+esc(P.name.slice(0,18))+'</span></td>'+D.weeks.map(function(x){var v=P.w[x]||0;return v?'<td style="background:rgba(47,111,176,'+(0.08+0.5*v/mx).toFixed(2)+')">'+fmt(rnd(v))+'</td>':'<td class="c-none">&ndash;</td>'}).join("")+'</tr>'});
+  h+='</table></div><div class="hint">Top 40 products by cases in the selected weeks. Blank = not scheduled that week. Darker = more cases for that product.</div>';
+  var pk=pickSec(h,DM.sec);return pk.head+pk.body;
+}
+var LAST={t:"",m:""};function sigNow(){return tab+"|"+curDate()+"|"+DM.sec+"|"+FS.sec+"|"+TR.sec+"|"+MC.line}
 function render(){
   rT=null;
   var ae=document.activeElement,fk=null,fpos=0;
@@ -921,10 +999,11 @@ function render(){
   var date=curDate(),t=thr(),th="";
   th+='<button class="tab'+("Board"===tab?" on":"")+'" data-tab="Board">Board</button>';
   TRACKED.forEach(function(l){th+='<button class="tab'+(l===tab?" on":"")+'" data-tab="'+l+'"><i class="'+tabDot(l,date,t)+'"></i>'+l+'</button>'});
-  [["Trends"," sep"],["Full schedule",""],["Manual counts",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
+  [["Trends"," sep"],["Full schedule",""],["Demand",""],["Manual counts",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
   if(th!==LAST.t){$("tabs").innerHTML=th;LAST.t=th}
   var h="";
   if(tab==="Trends")h=buildTrends();
+  else if(tab==="Demand")h=buildDemand();
   else if(tab==="Manual counts")h=buildManual(date);
   else if(!date)h='<div class="card welcome"><h2>Waiting for the schedule</h2><p class="sub" style="font-size:15px">It loads by itself from schedule.json. Or open Settings (gear) and choose the weekly workbook.</p>'+(schedErr?'<p class="sub" style="color:var(--badfg)">'+esc(schedErr)+'</p>':'')+'</div>';
   else if(tab==="Board")h=buildBoard(date);
@@ -1403,7 +1482,7 @@ function onFile(f){
   fr.readAsArrayBuffer(f);
 }
 document.addEventListener("click",function(e){
-  var t=e.target.closest("[data-usel2l],[data-usel2lrun],[data-mcline],[data-mcclear],[data-fday],[data-fsec],[data-trsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  var t=e.target.closest("[data-usel2l],[data-usel2lrun],[data-mcline],[data-mcclear],[data-fday],[data-fsec],[data-trsec],[data-dmsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
   if(t.dataset.usel2l){var uk=t.dataset.usel2l;if(uk in AUTO){S.acts[uk]=Math.round(AUTO[uk]);syncPush("a",uk,S.acts[uk]);save();applyAll();render()}return}
   if(t.dataset.usel2lrun!=null){var ur=+t.dataset.usel2lrun,ud=curDate(),ut=0;for(var uh=0;uh<NH;uh++){var uk2=akey(ud,MC.line,uh,ur);if(uk2 in AUTO)ut+=AUTO[uk2]}mcSetRun(ud,MC.line,ur,String(Math.round(ut)));applyAll();render();return}
   if(t.dataset.mcline){MC.line=t.dataset.mcline;render();return}
@@ -1413,13 +1492,14 @@ document.addEventListener("click",function(e){
     mcClear(dd,kind==="line"?MC.line:null);save();applyAll();render();return}
   if(t.dataset.fsec){FS.sec=t.dataset.fsec;render();window.scrollTo(0,0);return}
   if(t.dataset.trsec){TR.sec=t.dataset.trsec;render();return}
+  if(t.dataset.dmsec){DM.sec=t.dataset.dmsec;render();return}
   if(t.dataset.fday){$("date").value=t.dataset.fday;FS.sec="day";applyAll();render();window.scrollTo(0,0);return}
   if(t.dataset.hsel!=null){SEL[CURSEL.k]=+t.dataset.hsel;render();return}
   if(t.dataset.hnav){SEL[CURSEL.k]=Math.max(0,Math.min(NH-1,CURSEL.h+(+t.dataset.hnav)));render();return}
   if(t.dataset.hnow){delete SEL[CURSEL.k];render();return}
   if(t.dataset.shsel!=null){var tg=+t.dataset.shsel;SEL[CURSEL.k]=(CURSEL.h<12?0:1)===tg?CURSEL.h:(tg*12);render();return}
   if(t.dataset.gline){tab=t.dataset.gline;render();window.scrollTo(0,0);return}
-  if(t.dataset.tab){tab=t.dataset.tab;render();if(tab==="Trends"&&!TR.once){TR.once=true;loadHistory()}return}
+  if(t.dataset.tab){tab=t.dataset.tab;render();if(tab==="Trends"&&!TR.once){TR.once=true;loadHistory()}else if(tab==="Demand"&&!DM.once){DM.once=true;var of=TR.from;TR.from=addDays(opDay(),-370);loadHistory(true).then(function(){TR.from=of;render()})}return}
   if(t.dataset.run!=null){var d=curDate(),k=d+"|"+tab,m=(S.running[k]=S.running[k]||{}),i=t.dataset.run;
     if(m[i]!=null){delete m[i];syncPush("r",k+"|"+i,null)}else{m[i]=Date.now();syncPush("r",k+"|"+i,m[i])}save();render();return}
   if(t.dataset.chips){showAllChips=!showAllChips;render();return}
@@ -1441,6 +1521,7 @@ document.addEventListener("input",function(e){
     if(v==="")delete S.acts[t.dataset.act];else if(!isNaN(f))S.acts[t.dataset.act]=f;else return;
     syncPush("a",t.dataset.act,v===""?null:f);save();later(1100)}
   else if(t.dataset.note){if(t.value.trim())S.notes[t.dataset.note]=t.value;else delete S.notes[t.dataset.note];syncPush("n",t.dataset.note,t.value.trim()?t.value:null);save()}
+  else if(t.dataset.k==="dmq"){DM.q=t.value;later(300)}
   else if(t.id==="thr")later(900);
   else if(t.id==="cap"){var cv=parseFloat(t.value);if(cv>0){S.capH=cv;save()}later(900)}
 });
@@ -1469,6 +1550,9 @@ document.addEventListener("change",function(e){
   else if(t.id==="fsLine"){FS.line=t.value;render()}
   else if(t.id==="fsMetric"){FS.metric=t.value;render()}
   else if(t.id==="trMetric"){TR.metric=t.value;render()}
+  else if(t.id==="dmLine"){DM.line=t.value;render()}
+  else if(t.id==="dmWks"){DM.wks=+t.value;render()}
+  else if(t.id==="dmSort"){DM.sort=t.value;render()}
 });
 document.addEventListener("mousedown",function(e){if(e.target.id==="mbg")closeModal()});
 document.addEventListener("keydown",function(e){if(e.key==="Escape")closeModal()});
@@ -1558,7 +1642,7 @@ document.addEventListener("keydown",function(e){
   if(k==="n"){var nb=document.querySelector("[data-hnow]");if(nb)nb.click();return}
   if(k==="["||k==="]"){$(k==="["?"dPrev":"dNext").click();return}
   if(/^[1-9]$/.test(k)&&TRACKED[+k-1]){go(TRACKED[+k-1]);return}
-  var map={b:"Board",t:"Trends",f:"Full schedule",m:"Manual counts"};
+  var map={b:"Board",t:"Trends",f:"Full schedule",d:"Demand",m:"Manual counts"};
   if(map[k.toLowerCase()]){go(map[k.toLowerCase()]);return}
   if(k==="u"&&undoFn){var f2=undoFn;undoFn=null;$("toast").classList.remove("on");f2();toast("Undone");return}
   if(k==="?"){toast("Keys:  / find   1-"+TRACKED.length+" lines   B board   T trends   F full   M manual   ← → hour   N now   [ ] day   U undo")}
@@ -1573,7 +1657,7 @@ document.addEventListener("keydown",function(e){
     if(tg.closest("input,select,textarea,.tw,.tlt,table,.gantt"))return;
     var dir=dx<0?1:-1,hn=tg.closest(".entry,.tlr")&&document.querySelector('[data-hnav="'+dir+'"]');
     if(hn){hn.click();return}
-    var order=["Board"].concat(TRACKED,["Trends","Full schedule","Manual counts"]),i=order.indexOf(tab)+dir;
+    var order=["Board"].concat(TRACKED,["Trends","Full schedule","Demand","Manual counts"]),i=order.indexOf(tab)+dir;
     if(i>=0&&i<order.length){tab=order[i];render();window.scrollTo(0,0);var on=document.querySelector(".tab.on");if(on&&on.scrollIntoView)on.scrollIntoView({inline:"center",block:"nearest"})}
   },{passive:true});
 })();
