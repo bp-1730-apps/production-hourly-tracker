@@ -158,6 +158,7 @@ table.hr td.ex{font-size:14px}
 table.cal{border-collapse:separate;border-spacing:2px}table.cal th{font-size:10px;color:var(--muted);font-weight:600;padding:0 2px;text-align:left;white-space:nowrap}table.cal th.dn{padding-right:6px}
 .cd{display:block;width:30px;height:28px;border:0;border-radius:5px;font-size:10px;font-weight:700;color:var(--ink);cursor:pointer;padding:0;text-align:center;line-height:28px}.cd.dk{color:#fff}.cd.sel{outline:2px solid var(--gold);outline-offset:1px}.cd.gap{border:1px dashed #b4bfcc;color:#9aa6b4;cursor:default;background:none}
 .fs details{margin:0}
+table.wkt tr.wk{cursor:pointer}table.wkt tr.wk:hover td{filter:brightness(.96)}table.wkt td{padding:7px 4px}table.wkt td b{display:inline;font-size:13px}
 </style>
 </head>
 <body>
@@ -169,7 +170,7 @@ table.cal{border-collapse:separate;border-spacing:2px}table.cal th{font-size:10p
 </div>
 <div id="panel" hidden>
  <div class="row">
-  <button class="btn pri" id="bLoad">Load schedule file...</button><input type="file" id="file" accept=".xlsb,.xlsx,.xlsm" style="display:none">
+  <button class="btn pri" id="bLoad">Load schedule file...</button> <button class="btn" id="bShare">Send schedules to all devices</button><input type="file" id="file" accept=".xlsb,.xlsx,.xlsm" style="display:none">
   <button class="btn" id="bPull">Refresh L2L</button><button class="btn" id="bUpc">Units per case</button>
   <label>VIEW</label><select id="view"><option value="auto">Auto</option><option value="1">1st shift</option><option value="2">2nd shift</option><option value="both">Both shifts</option></select>
   <label>YES AT</label><input type="number" id="thr" value="95" min="0" max="100"><span class="sub">% of expected</span>
@@ -305,7 +306,7 @@ function parseSchedule(rows){
 }
 
 // ---------- state helpers
-function allRunsOf(line,date){return (((REMOTE[date]||{})[line])||((S.plans[date]||{})[line])||[]).slice()}
+function allRunsOf(line,date){return (((S.plans[date]||{})[line])||((REMOTE[date]||{})[line])||[]).slice()}   // a schedule loaded in the app (shared to every device) wins over the saved files
 // runs with planned start/end times (older schedules have none: daily totals only)
 function runsSorted(line,date){var r=allRunsOf(line,date).filter(function(x){return x.s!=null});r.sort(function(a,b){return a.s-b.s});return r}
 function akey(d,l,h,r){return d+"|"+l+"|"+h+"|"+r}
@@ -581,21 +582,23 @@ function dailyData(){
   return out;
 }
 function agg(list){
-  var a={sched:0,hrs:0,schedHas:0,made:0,ok:0,okN:0,ea:0,et:0,days:0};
-  list.forEach(function(m){a.sched+=m.sched;a.hrs+=m.hrs||0;a.made+=m.made;a.ok+=m.ok;a.okN+=m.okN;a.ea+=m.ea;a.et+=m.et;if(m.has){a.days++;a.schedHas+=m.sched}});
+  var a={sched:0,hrs:0,schedHas:0,hrsHas:0,made:0,ok:0,okN:0,ea:0,et:0,days:0,runs:0,ld:0,co:0};
+  list.forEach(function(m){a.sched+=m.sched;a.hrs+=m.hrs||0;a.made+=m.made;a.ok+=m.ok;a.okN+=m.okN;a.ea+=m.ea;a.et+=m.et;a.runs+=m.runs||0;a.ld++;a.co+=Math.max(0,(m.runs||0)-1);if(m.has){a.days++;a.schedHas+=m.sched;a.hrsHas+=m.hrs||0}});
   return a;
 }
 function metricVal(a,metric,cap){
   if(metric==="util")return cap>0?100*(a?a.hrs:0)/cap:null;
   if(metric==="sched")return a&&a.sched>0?a.sched:null;
+  if(metric==="co")return a&&a.ld>0?a.co:null;
   if(!a||!a.days)return null;
   if(metric==="eff")return a.et>0?100*a.ea/a.et:null;
   if(metric==="att")return a.schedHas>0?100*a.made/a.schedHas:null;
   if(metric==="ok")return a.okN>0?100*a.ok/a.okN:null;
   if(metric==="made")return a.made;
+  if(metric==="oee")return a.schedHas>0&&a.days>0?100*(a.hrsHas/(capH()*a.days))*(a.made/a.schedHas):null;
   return null;
 }
-var MET={sched:"Cases scheduled",util:"Capacity utilization %",eff:"Efficiency %",att:"Made vs scheduled %",ok:"Hours on target %",made:"Cases made"};
+var MET={sched:"Cases scheduled",oee:"OEE % (estimate)",util:"Capacity utilization %",co:"Changeovers",eff:"Efficiency %",att:"Made vs scheduled %",ok:"Hours on target %",made:"Cases made"};
 var LCOL=["#2f6fb0","#e07b00","#2a9d5b","#b3261e","#7a4fb5","#5b6b7d"];
 function chartSvg(keys,series,pct,t){
   var W=900,H=280,pl=52,pr=14,pt=14,pb=34,mx=0;
@@ -615,6 +618,33 @@ function chartSvg(keys,series,pct,t){
     s.v.forEach(function(v,i){if(v!=null)g+='<circle cx="'+X(i)+'" cy="'+Y(v)+'" r="'+(n>60?1.8:3.2)+'" fill="'+s.col+'"/>'});
   });
   return g+'</svg>';
+}
+// summary tables for the chosen dates: per line, weekly attainment, shortest orders
+function trSummary(data){
+  var H=capH(),h='',pc=function(v){return v==null?'&ndash;':v.toFixed(1)+'%'};
+  var byL={};TRACKED.forEach(function(l){byL[l]=[]});data.forEach(function(m){byL[m.line].push(m)});
+  var all=agg(data);
+  h+='<h3 class="gh">By line, whole date range</h3><div class="card fs tw"><table><tr><th>LINE</th><th class="r">DAYS RUN</th><th class="r">OEE (est.)</th><th class="r">UTILIZATION</th><th class="r">MADE vs SCHEDULED</th><th class="r">CHANGEOVERS</th><th class="r">PER DAY RUN</th></tr>';
+  TRACKED.concat(["ALL"]).forEach(function(l){var a=l==="ALL"?all:agg(byL[l]);if(!a.ld)return;
+    var util=100*a.hrs/(H*a.ld);
+    h+='<tr><td><b>'+l+'</b></td><td class="r">'+a.ld+'</td><td class="r"><b>'+pc(metricVal(a,"oee"))+'</b></td><td class="r">'+util.toFixed(1)+'%</td><td class="r">'+pc(metricVal(a,"att"))+'</td><td class="r">'+fmt(a.co)+'</td><td class="r">'+(a.co/a.ld).toFixed(1)+'</td></tr>'});
+  h+='</table></div>';
+  // weekly attainment
+  var wk={};data.forEach(function(m){var k=mondayOf(m.date);(wk[k]=wk[k]||{}) ;(wk[k][m.line]=wk[k][m.line]||[]).push(m)});
+  var wks=Object.keys(wk).sort().reverse();
+  h+='<h3 class="gh">Weekly attainment</h3><div class="card fs tw"><table><tr><th>WEEK OF</th><th class="r">CASES SCHEDULED</th><th class="r">CASES MADE</th><th class="r">ATTAINMENT</th>'+TRACKED.map(function(l){return '<th class="r">'+l+'</th>'}).join("")+'</tr>';
+  wks.forEach(function(k){var lst=[];TRACKED.forEach(function(l){lst=lst.concat(wk[k][l]||[])});var a=agg(lst),v=metricVal(a,"att");
+    var col=function(x){return x==null?'':x>=95?'background:#e2f4e6':x>=85?'background:#fdf3d0':'background:#fadcd8'};
+    h+='<tr><td><b>'+pretty(k)+'</b></td><td class="r">'+fmt(rnd(a.schedHas))+'</td><td class="r">'+fmt(rnd(a.made))+'</td><td class="r" style="'+col(v)+'"><b>'+pc(v)+'</b></td>'+TRACKED.map(function(l){var x=metricVal(agg(wk[k][l]||[]),"att");return '<td class="r" style="'+col(x)+'">'+pc(x)+'</td>'}).join("")+'</tr>'});
+  h+='</table></div><div class="sub">Attainment = cases made / cases scheduled, only on days that have cases made. Green 95%+, amber 85-95%, red under 85%.</div>';
+  // shortest orders
+  var runs=[];data.days.forEach(function(d){TRACKED.forEach(function(l){allRunsOf(l,d).forEach(function(r){if(r.need>0)runs.push({d:d,l:l,r:r})})})});
+  runs.sort(function(a,b){return a.r.need-b.r.need});
+  var med=runs.length?runs[Math.floor(runs.length/2)].r.need:0;
+  h+='<h3 class="gh">Shortest orders <span class="sub" style="font-weight:400">(fewest cases per run; median run is '+fmt(rnd(med))+' cases, '+fmt(runs.length)+' runs)</span></h3><div class="card fs tw"><table><tr><th>DATE</th><th>LINE</th><th>ITEM</th><th>PRODUCT</th><th class="r">CASES</th><th class="r">HOURS</th><th class="r">MADE</th></tr>';
+  runs.slice(0,15).forEach(function(x){h+='<tr><td>'+pretty(x.d)+'</td><td><b>'+x.l+'</b></td><td>'+esc(x.r.item)+'</td><td>'+esc(x.r.name)+'</td><td class="r"><b>'+fmt(rnd(x.r.need))+'</b></td><td class="r">'+runHrs(x.r).toFixed(2)+'</td><td class="r">'+(x.r.made>0?fmt(rnd(x.r.made)):'')+'</td></tr>'});
+  h+='</table></div><div class="sub">Short runs mean more changeovers per case. The same list for each line is in the Excel export (Runs sheet, sort by Cases).</div>';
+  return h;
 }
 function buildTrends(){
   var t=thr(),h='<h2>Trends</h2><div class="sub" style="margin-bottom:8px">Plans saved from your weekly workbooks plus L2L actuals saved each day. Typed corrections on this device count too.</div>';
@@ -637,18 +667,18 @@ function buildTrends(){
   var keyDays={};data.days.forEach(function(d){var k=groupKey(d);keyDays[k]=(keyDays[k]||0)+1});
   var capFor=function(k,n){return capH()*(keyDays[k]||0)*n};
   var firstData=keys.findIndex(function(k){return TRACKED.some(function(l){return (byKL[k+"|"+l]||[]).some(function(m){return m.has})})});
-  if(firstData>0&&TR.metric!=="sched"&&TR.metric!=="util")keys=keys.slice(firstData);          // leave out empty periods before the first counts
+  if(firstData>0&&TR.metric!=="sched"&&TR.metric!=="util"&&TR.metric!=="co")keys=keys.slice(firstData);          // leave out empty periods before the first counts
   if(!keys.length)return h+'<div class="card" style="padding:20px;color:var(--muted)">No schedule days found between these dates.</div>';
-  var pct=TR.metric!=="made"&&TR.metric!=="sched",series=TRACKED.map(function(l,i){return {line:l,col:LCOL[i],v:keys.map(function(k){return metricVal(agg(byKL[k+"|"+l]||[]),TR.metric,capFor(k,1))})}});
+  var pct=TR.metric!=="made"&&TR.metric!=="sched"&&TR.metric!=="co",series=TRACKED.map(function(l,i){return {line:l,col:LCOL[i],v:keys.map(function(k){return metricVal(agg(byKL[k+"|"+l]||[]),TR.metric,capFor(k,1))})}});
   var allV=keys.map(function(k){var l=[];TRACKED.forEach(function(x){l=l.concat(byKL[k+"|"+x]||[])});return metricVal(agg(l),TR.metric,capFor(k,TRACKED.length))});
   var tot=agg(data),dd={};data.forEach(function(m){if(m.has)dd[m.date]=1});
-  h+='<div class="sub" style="margin-bottom:4px"><b>'+MET[TR.metric]+'</b> by '+TR.group+'. '+(TR.metric==='util'?'Utilization = scheduled run hours / ('+capH()+' h x schedule days in the period), so a full 5-day week is '+capH()*5+' h per line.':Object.keys(dd).length+' day(s) in range have L2L or typed counts; days without counts are left out of the percentages.')+'</div>';
+  h+='<div class="sub" style="margin-bottom:4px"><b>'+MET[TR.metric]+'</b> by '+TR.group+'. '+(TR.metric==='oee'?'OEE estimate = availability x performance x quality. Availability = scheduled run hours / '+capH()+' h per day; performance = cases made / cases scheduled; quality is not recorded so it counts as 100%. Only days with cases made are used.':TR.metric==='co'?'Changeovers = runs minus 1 for each line-day (each extra run in a day is a product change).':TR.metric==='util'?'Utilization = scheduled run hours / ('+capH()+' h x schedule days in the period), so a full 5-day week is '+capH()*5+' h per line.':Object.keys(dd).length+' day(s) in range have L2L or typed counts; days without counts are left out of the percentages.')+'</div>';
   h+=chartSvg(keys,series,pct,t);
   h+='<div class="leg" style="margin:8px 0">'+series.map(function(s){return '<span style="background:#fff;border:1px solid var(--line)"><i style="display:inline-block;width:10px;height:10px;background:'+s.col+';margin-right:6px"></i>'+s.line+'</span>'}).join("")+'</div>';
   function cell(v){
     if(v==null)return '<td class="c-none">&ndash;</td>';
     if(!pct)return '<td><b style="display:inline">'+fmt(rnd(v))+'</b></td>';
-    if(TR.metric==='util')return '<td style="background:linear-gradient(90deg,#cfe3f8 '+Math.min(100,v)+'%,#fff '+Math.min(100,v)+'%)"><b style="display:inline">'+v.toFixed(1)+'%</b></td>';
+    if(TR.metric==='util'||TR.metric==='oee')return '<td style="background:linear-gradient(90deg,#cfe3f8 '+Math.min(100,v)+'%,#fff '+Math.min(100,v)+'%)"><b style="display:inline">'+v.toFixed(1)+'%</b></td>';
     return '<td class="'+effClass(v/100,t)+'"><b style="display:inline">'+v.toFixed(1)+'%</b></td>';
   }
   h+='<div class="card tw"><table class="ov"><tr><th>'+(TR.group==="month"?"MONTH":(TR.group==="week"?"WEEK OF":"DAY"))+'</th>'+TRACKED.map(function(l){return '<th>'+l+'</th>'}).join("")+'<th>ALL LINES</th></tr>';
@@ -656,7 +686,7 @@ function buildTrends(){
     var i=keys.indexOf(k);
     h+='<tr><td class="ln" style="font-size:13px">'+k+'</td>'+series.map(function(s){return cell(s.v[i])}).join("")+cell(allV[i])+'</tr>';
   });
-  h+='</table></div><div class="hint">Efficiency = cases made / cases the schedule calls for in hours with counts. Made vs scheduled = cases made / cases scheduled on days with counts. Hours on target = hours at or above the YES line / hours with counts. Green meets the YES line, amber is within 10 points.</div>';
+  h+='</table></div>'+trSummary(data)+'<div class="hint">Efficiency = cases made / cases the schedule calls for in hours with counts. Made vs scheduled = cases made / cases scheduled on days with counts. Hours on target = hours at or above the YES line / hours with counts. Green meets the YES line, amber is within 10 points.</div>';
   return h;
 }
 async function exportXlsx(){
@@ -708,7 +738,12 @@ function applyRemote(x){
   if(SYNC.pend[x.k]!==undefined)return false;                 // our own newer edit is still waiting to be sent
   var p=x.k.split("|"),kind=p[0],key=p.slice(1).join("|"),val=x.deleted?null:x.v,store,cur;
   if(kind==="a")store=S.acts;else if(kind==="n")store=S.notes;else if(kind==="d")store=S.dones;else if(kind==="u")store=S.upc;
-  else if(kind==="r"){
+  else if(kind==="p"){                                       // a schedule loaded in the app on any device
+    var pp=key.split("|"),pd=pp[0],pl=pp[1];
+    if(val==null){if(!(S.plans[pd]&&S.plans[pd][pl]))return false;delete S.plans[pd][pl];return true}
+    if(JSON.stringify((S.plans[pd]||{})[pl])===JSON.stringify(val))return false;
+    (S.plans[pd]=S.plans[pd]||{})[pl]=val;return true;
+  }else if(kind==="r"){
     var rk=p[1]+"|"+p[2],ri=p[3],m=S.running[rk]=S.running[rk]||{};cur=m[ri];
     if(val==null){if(cur===undefined)return false;delete m[ri];return true}
     if(cur===val)return false;m[ri]=val;return true;
@@ -732,9 +767,10 @@ async function syncPull(){
     SYNC.last=maxT;S.syncLast=maxT;SYNC.err="";SYNC.at=new Date();
   }catch(e){SYNC.err="could not read: "+((e&&e.message)||e)}
   SYNC.busy=false;
-  if(changed){save();applyAll();var a=document.activeElement;if(a&&a.tagName==="INPUT"&&a.dataset&&a.dataset.k)later(1500);else render()}
+  if(changed){save();fillDates(curDate());applyAll();var a=document.activeElement;if(a&&a.tagName==="INPUT"&&a.dataset&&a.dataset.k)later(1500);else render()}
   else statusLabel();
 }
+function sharePlans(){var n=0;Object.keys(S.plans).forEach(function(d){Object.keys(S.plans[d]).forEach(function(l){syncPush("p",d+"|"+l,S.plans[d][l]);n++})});return n}
 async function syncInit(){
   try{
     var c=await getJson("config.json");
@@ -751,6 +787,7 @@ async function syncInit(){
     Object.keys(S.running).forEach(function(rk){Object.keys(S.running[rk]).forEach(function(ri){syncPush("r",rk+"|"+ri,S.running[rk][ri])})});
     S.syncMig=1;save();
   }
+  if(!S.planMig){sharePlans();S.planMig=1;save()}              // schedules loaded here before sharing existed
   await syncPull();setInterval(syncPull,15000);
 }
 
@@ -806,7 +843,7 @@ function statusLabel(){
     var x=line+": "+st.records+" L2L records, "+st.used+" used";
     [["by_schedule","matched to the schedule by time"],["blank_actual","blank actual"],["no_code","no product code"],["no_time","bad time"],["no_units","hours waiting for units per case"],["off_schedule","hours whose product is not on the schedule"]].forEach(function(q){if(st[q[0]])x+=", "+st[q[0]]+" "+q[1]});
     t.push([0,x])}});
-  t.push([SYNC.err?1:0,SYNC.on?(SYNC.err?"Shared entries: "+SYNC.err:"Shared entries: on, last checked "+(SYNC.at?SYNC.at.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):"...")+" (typed actuals, notes and ticks are the same on every device)"):"Shared entries: off, so typed entries stay in this browser only (see SETUP, part E)"]);
+  t.push([SYNC.err?1:0,SYNC.on?(SYNC.err?"Shared entries: "+SYNC.err:"Shared entries: on, last checked "+(SYNC.at?SYNC.at.toLocaleTimeString("en-US",{hour:"numeric",minute:"2-digit"}):"...")+" (typed actuals, notes, ticks and schedules loaded in the app are the same on every device; "+Object.keys(S.plans).length+" schedule day(s) on this device)"):"Shared entries: off, so typed entries stay in this browser only (see SETUP, part E)"]);
   $("foot").textContent=SYNC.on?"Entries are shared across devices.":"Entries (actuals you type, notes, ticks) save in this browser only.";
   $("stats").innerHTML=t.map(function(x){return '<div'+(x[0]?' class="bad"':'')+'>'+esc(x[1])+'</div>'}).join("");
 }
@@ -1040,25 +1077,31 @@ function buildFull(date){
   var T={need:0,made:0,madeNeed:0,hrs:0,runs:0};
   ds.forEach(function(d){var o=days[d];T.need+=o.need;T.made+=o.made;T.madeNeed+=o.madeNeed;T.hrs+=o.hrs;T.runs+=o.runs});
   var kpi=function(a,b,c){return '<div class="kp"><b>'+a+'</b><span>'+b+'</span><i>'+c+'</i></div>'};
-  h+='<div class="sub" style="margin-bottom:8px">Everything in the schedule data: '+pretty(ds[0])+' to '+pretty(ds[ds.length-1])+'. Tap a day in the calendar to open it below.</div><div class="kps">'+
+  h+='<div class="sub" style="margin-bottom:8px">Everything in the schedule data: '+pretty(ds[0])+' to '+pretty(ds[ds.length-1])+'. Tap a week below to open its first day.</div><div class="kps">'+
     kpi(ds.length,'days scheduled','with at least one run')+kpi(fmt(rnd(T.runs)),'runs','across '+TRACKED.join(", "))+kpi(fmt(rnd(T.need)),'cases scheduled','sum of CASES NEEDED')+
     kpi(T.madeNeed>0?(100*T.made/T.madeNeed).toFixed(1)+'%':'&ndash;','made vs scheduled','CASES MFG. &divide; CASES NEEDED on runs that have a CASES MFG. entry')+
     kpi((100*T.hrs/(H*nL*ds.length)).toFixed(0)+'%','avg utilization','scheduled run hours &divide; ('+H+' h &times; '+nL+' lines) per scheduled day')+'</div>';
-  // calendar heatmap
-  var mon0=mondayOf(ds[0]),mon1=mondayOf(ds[ds.length-1]),weeks=[];
-  for(var w=mon0;w<=mon1;w=addDays(w,7))weeks.push(w);
+  // weekly grid: one row per week, one column per line
   var today=opDay();
-  h+='<h3 class="gh">Calendar &nbsp;<select id="fsMetric" style="font-size:13px;padding:2px 4px"><option value="util"'+(FS.metric==="util"?" selected":"")+'>Capacity utilization %</option><option value="att"'+(FS.metric==="att"?" selected":"")+'>Made vs scheduled %</option></select></h3>';
-  h+='<div class="card tw" style="padding:10px"><table class="cal"><tr><th></th>';
-  var lastM="";weeks.forEach(function(wk){var m=wk.slice(0,7);h+='<th class="mh">'+(m!==lastM?["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][+m.slice(5)-1]:"")+'</th>';lastM=m});h+='</tr>';
-  ["Mon","Tue","Wed","Thu","Fri","Sat","Sun"].forEach(function(nm,di){
-    h+='<tr><th class="dn">'+nm+'</th>';
-    weeks.forEach(function(wk){var d=addDays(wk,di),o=days[d];
-      if(o){var c=fsCell(o,FS.metric,H,nL);h+='<td><button class="cd'+(d===date?' sel':'')+(c.dark?' dk':'')+'" data-fday="'+d+'" style="background:'+c.c+'" title="'+pretty(d)+' '+dayname(d)+': '+c.tip+'">'+c.t+'</button></td>'}
-      else if(di<5&&d<=today&&d>=ds[0]&&d<=ds[ds.length-1])h+='<td><span class="cd gap" title="'+pretty(d)+': no schedule loaded">?</span></td>';
-      else h+='<td></td>'});
-    h+='</tr>'});
-  h+='</table><div class="leg" style="margin-top:8px">'+(FS.metric==="util"?'<span style="background:rgba(31,111,190,.2)">Low use</span><span style="background:rgba(31,111,190,.9);color:#fff">Near full</span>':'<span style="background:#bfe8c9">95%+</span><span style="background:#fde9a8">85-95%</span><span style="background:#f6b8b0">under 85%</span><span style="background:#eef1f5">no actuals</span>')+'<span class="gap" style="border:1px dashed #b4bfcc">? weekday with no schedule loaded</span></div></div>';
+  var mon0=mondayOf(ds[0]),mon1=mondayOf(ds[ds.length-1]),weeks=[];
+  for(var w=mon1;w>=mon0;w=addDays(w,-7))weeks.push(w);
+  var WK={};weeks.forEach(function(wk){var o={all:{hrs:0,made:0,mn:0}},first="";
+    for(var i=0;i<7;i++){var d=addDays(wk,i);if(days[d]&&!first)first=d}
+    TRACKED.forEach(function(l){var x=o[l]={hrs:0,made:0,mn:0};
+      for(var i=0;i<7;i++){var d=addDays(wk,i);allRunsOf(l,d).forEach(function(r){var hh=runHrs(r);x.hrs+=hh;if(r.made>0){x.made+=r.made;x.mn+=r.need}})}
+      o.all.hrs+=x.hrs;o.all.made+=x.made;o.all.mn+=x.mn});
+    o.first=first;WK[wk]=o});
+  var wcell=function(x,n){
+    if(FS.metric==="att"){if(!(x.mn>0))return '<td class="c-none">&ndash;</td>';var p=100*x.made/x.mn;return '<td style="background:'+(p>=95?'#e2f4e6':p>=85?'#fdf3d0':'#fadcd8')+'"><b>'+p.toFixed(0)+'%</b></td>'}
+    if(!(x.hrs>0))return '<td class="c-none">&ndash;</td>';var u=100*x.hrs/(H*5*n);
+    return '<td style="background:linear-gradient(90deg,#cfe3f8 '+Math.min(100,u)+'%,#fff '+Math.min(100,u)+'%)"><b>'+u.toFixed(0)+'%</b></td>'};
+  var wrow=function(wk){var o=WK[wk],on=(date>=wk&&date<=addDays(wk,6));
+    return '<tr'+(o.first?' class="wk" data-fday="'+(on?date:o.first)+'"':'')+(on?' style="outline:2px solid var(--gold);outline-offset:-2px"':'')+'><td class="ln" style="font-size:13px;text-align:left">'+pretty(wk).slice(0,5)+'</td>'+TRACKED.map(function(l){return wcell(o[l],1)}).join("")+wcell(o.all,nL)+'</tr>'};
+  var whead='<tr><th>WEEK OF</th>'+TRACKED.map(function(l){return '<th>'+l+'</th>'}).join("")+'<th>ALL</th></tr>';
+  h+='<h3 class="gh">By week &nbsp;<select id="fsMetric" style="font-size:13px;padding:2px 4px"><option value="util"'+(FS.metric==="util"?" selected":"")+'>Capacity utilization %</option><option value="att"'+(FS.metric==="att"?" selected":"")+'>Made vs scheduled %</option></select></h3>';
+  h+='<div class="sub" style="margin-bottom:6px">'+(FS.metric==="util"?'Utilization = scheduled run hours in the week &divide; ('+H+' h &times; 5 days) per line.':'Made vs scheduled = CASES MFG. &divide; CASES NEEDED on runs that have a CASES MFG. entry.')+' Tap a week to open its first day below.</div>';
+  h+='<div class="card tw"><table class="ov wkt">'+whead+weeks.slice(0,12).map(wrow).join("")+'</table></div>';
+  if(weeks.length>12)h+='<details style="margin-bottom:8px"><summary class="sub" style="cursor:pointer">Show the other '+(weeks.length-12)+' weeks</summary><div class="card tw"><table class="ov wkt">'+whead+weeks.slice(12).map(wrow).join("")+'</table></div></details>';
   // lines table
   h+='<h3 class="gh">By line</h3><div class="card fs tw"><table><tr><th>LINE</th><th class="r">DAYS RUN</th><th class="r">RUNS</th><th class="r">RUNS / DAY</th><th class="r">CHANGEOVERS</th><th class="r">AVG RUN (h)</th><th class="r">HOURS</th><th class="r">UTILIZATION</th><th class="r">CASES SCHEDULED</th><th class="r">MADE vs SCHEDULED</th></tr>';
   TRACKED.forEach(function(l){var L=st.line[l];if(!L)return;
@@ -1123,14 +1166,14 @@ function onFile(f){
   var fr=new FileReader();
   fr.onload=function(){
     try{var parsed=parseSchedule(readRows(new Uint8Array(fr.result))),n=0;
-      Object.keys(parsed).forEach(function(k){var p=k.split("|");(S.plans[p[1]]=S.plans[p[1]]||{})[p[0]]=parsed[k];n++});
+      Object.keys(parsed).forEach(function(k){var p=k.split("|");(S.plans[p[1]]=S.plans[p[1]]||{})[p[0]]=parsed[k];syncPush("p",p[1]+"|"+p[0],parsed[k]);n++});
       save();fillDates(curDate());applyAll();render();
-      alert("Loaded "+n+" line-days from "+f.name+" (this device only).\nEntries already made are kept.");
+      alert("Loaded "+n+" line-days from "+f.name+" "+(SYNC.on?"and shared to all your devices (they update within about 15 seconds).":"(this device only; shared entries are not set up).")+"\nEntries already made are kept.");
     }catch(e){alert("Could not read the schedule:\n\n"+e.message)}};
   fr.readAsArrayBuffer(f);
 }
 document.addEventListener("click",function(e){
-  var t=e.target.closest("[data-fday],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  var t=e.target.closest("[data-fday],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
   if(t.dataset.fday){$("date").value=t.dataset.fday;applyAll();render();return}
   if(t.dataset.hsel!=null){SEL[CURSEL.k]=+t.dataset.hsel;render();return}
   if(t.dataset.hnav){SEL[CURSEL.k]=Math.max(0,Math.min(NH-1,CURSEL.h+(+t.dataset.hnav)));render();return}
@@ -1146,6 +1189,7 @@ document.addEventListener("click",function(e){
   if(t.id==="dPrev"||t.id==="dNext"){var sel=$("date"),i=sel.selectedIndex+(t.id==="dPrev"?1:-1);if(i>=0&&i<sel.options.length){sel.selectedIndex=i;applyAll();render()}return}
   if(t.id==="bLoad")$("file").click();
   else if(t.id==="bPull")pullAll();
+  else if(t.id==="bShare"){if(!SYNC.on)alert("Shared entries are not set up, so schedules cannot be shared.");else{var n=sharePlans();alert("Sent "+n+" line-day(s) of schedule to your other devices. They update within about 15 seconds.")}}
   else if(t.id==="bUpc")upcDialog();
   else if(t.id==="bTr")loadHistory();
   else if(t.id==="bExp")exportXlsx();
