@@ -159,6 +159,10 @@ table.cal{border-collapse:separate;border-spacing:2px}table.cal th{font-size:10p
 .cd{display:block;width:30px;height:28px;border:0;border-radius:5px;font-size:10px;font-weight:700;color:var(--ink);cursor:pointer;padding:0;text-align:center;line-height:28px}.cd.dk{color:#fff}.cd.sel{outline:2px solid var(--gold);outline-offset:1px}.cd.gap{border:1px dashed #b4bfcc;color:#9aa6b4;cursor:default;background:none}
 .fs details{margin:0}
 table.wkt tr.wk{cursor:pointer}table.wkt tr.wk:hover td{filter:brightness(.96)}table.wkt td{padding:7px 4px}table.wkt td b{display:inline;font-size:13px}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin:10px 0 14px}.seg button{border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:999px;padding:8px 16px;font:inherit;font-size:14px;font-weight:600;cursor:pointer}.seg button.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+.ctl{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin:4px 0 12px}.ctl label{font-size:11px;font-weight:700;color:var(--muted)}
+.kp i{display:none}.kp b{font-size:22px}.kps{margin-bottom:16px}
+.wr{margin:2px 0;white-space:normal}td.pr{min-width:240px}
 </style>
 </head>
 <body>
@@ -634,7 +638,7 @@ function trSummary(data){
   var H=capH(),h='',pc=function(v){return v==null?'&ndash;':v.toFixed(1)+'%'};
   var byL={};TRACKED.forEach(function(l){byL[l]=[]});data.forEach(function(m){byL[m.line].push(m)});
   var all=agg(data);
-  h+='<h3 class="gh">By line, whole date range</h3><div class="card fs tw"><table><tr><th>LINE</th><th class="r">DAYS RUN</th><th class="r">OEE (est.)</th><th class="r">UTILIZATION</th><th class="r">MADE vs SCHEDULED</th><th class="r">CHANGEOVERS</th><th class="r">PER DAY RUN</th></tr>';
+  h+='\u0001ln\u0001<h3 class="gh">By line, whole date range</h3><div class="card fs tw"><table><tr><th>LINE</th><th class="r">DAYS RUN</th><th class="r">OEE (est.)</th><th class="r">UTILIZATION</th><th class="r">MADE vs SCHEDULED</th><th class="r">CHANGEOVERS</th><th class="r">PER DAY RUN</th></tr>';
   TRACKED.concat(["ALL"]).forEach(function(l){var a=l==="ALL"?all:agg(byL[l]);if(!a.ld)return;
     var util=100*a.hrs/(H*a.ld);
     h+='<tr><td><b>'+l+'</b></td><td class="r">'+a.ld+'</td><td class="r"><b>'+pc(metricVal(a,"oee"))+'</b></td><td class="r">'+util.toFixed(1)+'%</td><td class="r">'+pc(metricVal(a,"att"))+'</td><td class="r">'+fmt(a.co)+'</td><td class="r">'+(a.co/a.ld).toFixed(1)+'</td></tr>'});
@@ -642,7 +646,7 @@ function trSummary(data){
   // weekly attainment
   var wk={};data.forEach(function(m){var k=mondayOf(m.date);(wk[k]=wk[k]||{}) ;(wk[k][m.line]=wk[k][m.line]||[]).push(m)});
   var wks=Object.keys(wk).sort().reverse();
-  h+='<h3 class="gh">Weekly attainment</h3><div class="card fs tw"><table><tr><th>WEEK OF</th><th class="r">CASES SCHEDULED</th><th class="r">CASES MADE</th><th class="r">ATTAINMENT</th>'+TRACKED.map(function(l){return '<th class="r">'+l+'</th>'}).join("")+'</tr>';
+  h+='\u0001wk\u0001<h3 class="gh">Weekly attainment</h3><div class="card fs tw"><table><tr><th>WEEK OF</th><th class="r">CASES SCHEDULED</th><th class="r">CASES MADE</th><th class="r">ATTAINMENT</th>'+TRACKED.map(function(l){return '<th class="r">'+l+'</th>'}).join("")+'</tr>';
   wks.forEach(function(k){var lst=[];TRACKED.forEach(function(l){lst=lst.concat(wk[k][l]||[])});var a=agg(lst),v=metricVal(a,"att");
     var col=function(x){return x==null?'':x>=95?'background:#e2f4e6':x>=85?'background:#fdf3d0':'background:#fadcd8'};
     h+='<tr><td><b>'+pretty(k)+'</b></td><td class="r">'+fmt(rnd(a.schedHas))+'</td><td class="r">'+fmt(rnd(a.made))+'</td><td class="r" style="'+col(v)+'"><b>'+pc(v)+'</b></td>'+TRACKED.map(function(l){var x=metricVal(agg(wk[k][l]||[]),"att");return '<td class="r" style="'+col(x)+'">'+pc(x)+'</td>'}).join("")+'</tr>'});
@@ -651,7 +655,7 @@ function trSummary(data){
   var runs=[];data.days.forEach(function(d){TRACKED.forEach(function(l){allRunsOf(l,d).forEach(function(r){if(r.need>0)runs.push({d:d,l:l,r:r})})})});
   runs.sort(function(a,b){return a.r.need-b.r.need});
   var med=runs.length?runs[Math.floor(runs.length/2)].r.need:0;
-  h+='<h3 class="gh">Shortest orders <span class="sub" style="font-weight:400">(fewest cases per run; median run is '+fmt(rnd(med))+' cases, '+fmt(runs.length)+' runs)</span></h3><div class="card fs tw"><table><tr><th>DATE</th><th>LINE</th><th>ITEM</th><th>PRODUCT</th><th class="r">CASES</th><th class="r">HOURS</th><th class="r">MADE</th></tr>';
+  h+='\u0001sh\u0001<h3 class="gh">Shortest orders <span class="sub" style="font-weight:400">(fewest cases per run; median run is '+fmt(rnd(med))+' cases, '+fmt(runs.length)+' runs)</span></h3><div class="card fs tw"><table><tr><th>DATE</th><th>LINE</th><th>ITEM</th><th>PRODUCT</th><th class="r">CASES</th><th class="r">HOURS</th><th class="r">MADE</th></tr>';
   runs.slice(0,15).forEach(function(x){h+='<tr><td>'+pretty(x.d)+'</td><td><b>'+x.l+'</b></td><td>'+esc(x.r.item)+'</td><td>'+esc(x.r.name)+'</td><td class="r"><b>'+fmt(rnd(x.r.need))+'</b></td><td class="r">'+runHrs(x.r).toFixed(2)+'</td><td class="r">'+(x.r.made>0?fmt(rnd(x.r.made)):'')+'</td></tr>'});
   h+='</table></div><div class="sub">Short runs mean more changeovers per case. The same list for each line is in the Excel export (Runs sheet, sort by Cases).</div>';
   return h;
@@ -659,16 +663,18 @@ function trSummary(data){
 function buildTrends(){
   var t=thr(),h='<h2>Trends</h2><div class="sub" style="margin-bottom:8px">Plans saved from your weekly workbooks plus L2L actuals saved each day. Typed corrections on this device count too.</div>';
   h+='<div class="card tools"><label>FROM</label><input type="date" id="trFrom" value="'+TR.from+'"><label>TO</label><input type="date" id="trTo" value="'+TR.to+'">';
-  h+='<label>GROUP</label><select id="trGroup">'+[["day","Day"],["week","Week"],["month","Month"]].map(function(o){return '<option value="'+o[0]+'"'+(TR.group===o[0]?" selected":"")+'>'+o[1]+'</option>'}).join("")+'</select>';
-  h+='<label>SHOW</label><select id="trMetric">'+Object.keys(MET).map(function(k){return '<option value="'+k+'"'+(TR.metric===k?" selected":"")+'>'+MET[k]+'</option>'}).join("")+'</select>';
+  var ctlH='<div class="ctl"><label>GROUP</label><select id="trGroup">'+[["day","Day"],["week","Week"],["month","Month"]].map(function(o){return '<option value="'+o[0]+'"'+(TR.group===o[0]?" selected":"")+'>'+o[1]+'</option>'}).join("")+'</select>';
+  ctlH+='<label>SHOW</label><select id="trMetric">'+Object.keys(MET).map(function(k){return '<option value="'+k+'"'+(TR.metric===k?" selected":"")+'>'+MET[k]+'</option>'}).join("")+'</select>'+'</div>';
   h+='<button class="btn" id="bTr">Reload</button><button class="btn pri" id="bExp">Export Excel</button></div>';
   h+='<div class="sub" style="margin:6px 0">'+esc(TR.msg)+'</div>';
+  h+=segNav([["chart","Chart"],["wk","Weekly attainment"],["ln","By line"],["sh","Shortest orders"],["cov","Data coverage"]],TR.sec||"chart","trsec");
   var data=dailyData(),keys={},byKL={};
   var cov={},wbDay={};
   data.forEach(function(m){if(m.wb)wbDay[m.date]=1});
   data.days.forEach(function(d){var mo=d.slice(0,7),c=cov[mo]=cov[mo]||{days:0,rec:0,cnt:0,wb:0,miss:{}};c.days++;if(wbDay[d])c.wb++;if(data.recDays[d])c.rec++;if(data.cntDays[d])c.cnt++;Object.keys(data.miss[d]||{}).forEach(function(k){if(/^\d+$/.test(k))c.miss[k]=1})});
   var covKeys=Object.keys(cov).sort(),weak=covKeys.some(function(mo){return cov[mo].cnt<cov[mo].days});
-  h+='<details class="hu"'+(weak?' open':'')+'><summary>Data coverage by month'+(weak?' <span style="font-weight:400;color:var(--muted)">(some days have no counts)</span>':'')+'</summary><div class="tw"><table class="hr" style="margin-top:0"><thead><tr><th>MONTH</th><th class="c">SCHEDULE DAYS</th><th class="c">DAYS WITH L2L RECORDS</th><th class="c">DAYS WITH COUNTS</th><th class="c">...FROM WORKBOOK</th><th class="c">L2L FILE SAVED</th><th>UNITS PER CASE MISSING FOR</th></tr></thead><tbody>';
+  h+='\u0001cov\u0001';
+  h+='<details class="hu" open><summary>Data coverage by month'+(weak?' <span style="font-weight:400;color:var(--muted)">(some days have no counts)</span>':'')+'</summary><div class="tw"><table class="hr" style="margin-top:0"><thead><tr><th>MONTH</th><th class="c">SCHEDULE DAYS</th><th class="c">DAYS WITH L2L RECORDS</th><th class="c">DAYS WITH COUNTS</th><th class="c">...FROM WORKBOOK</th><th class="c">L2L FILE SAVED</th><th>UNITS PER CASE MISSING FOR</th></tr></thead><tbody>';
   covKeys.forEach(function(mo){var c=cov[mo],mk=Object.keys(c.miss).sort();
     h+='<tr><td><b>'+mo+'</b></td><td style="text-align:center">'+c.days+'</td><td style="text-align:center">'+c.rec+'</td><td style="text-align:center">'+c.cnt+'</td><td style="text-align:center">'+c.wb+'</td><td style="text-align:center">'+(ARCHM[mo]>0?'yes ('+fmt(ARCHM[mo])+' records)':'<span style="color:var(--muted)">not needed for history</span>')+'</td><td class="sub">'+(mk.length?esc(mk.slice(0,14).join(", ")+(mk.length>14?" ... +"+(mk.length-14):"")):"")+'</td></tr>'});
   h+='</tbody></table></div><div class="hint" style="padding:0 0 8px">Past days use the cases made recorded in your weekly workbooks (daily totals). L2L hourly counts are used when they exist. Efficiency and hours on target need hourly counts, so they appear only for days with L2L or typed hourly counts; Made vs scheduled works for every day with a workbook total.</div></details>';
@@ -681,6 +687,7 @@ function buildTrends(){
   if(!keys.length)return h+'<div class="card" style="padding:20px;color:var(--muted)">No schedule days found between these dates.</div>';
   var pct=TR.metric!=="made"&&TR.metric!=="sched"&&TR.metric!=="co",series=TRACKED.map(function(l,i){return {line:l,col:LCOL[i],v:keys.map(function(k){return metricVal(agg(byKL[k+"|"+l]||[]),TR.metric,capFor(k,1))})}});
   var allV=keys.map(function(k){var l=[];TRACKED.forEach(function(x){l=l.concat(byKL[k+"|"+x]||[])});return metricVal(agg(l),TR.metric,capFor(k,TRACKED.length))});
+  h+='\u0001chart\u0001'+ctlH;
   var tot=agg(data),dd={};data.forEach(function(m){if(m.has)dd[m.date]=1});
   h+='<div class="sub" style="margin-bottom:4px"><b>'+MET[TR.metric]+'</b> by '+TR.group+'. '+(TR.metric==='oee'?'OEE estimate = availability x performance x quality. Availability = scheduled run hours / '+capH()+' h per day; performance = cases made / cases scheduled; quality is not recorded so it counts as 100%. Only days with cases made are used.':TR.metric==='co'?'Changeovers = runs minus 1 for each line-day (each extra run in a day is a product change).':TR.metric==='util'?'Utilization = scheduled run hours / ('+capH()+' h x schedule days in the period), so a full 5-day week is '+capH()*5+' h per line.':Object.keys(dd).length+' day(s) in range have L2L or typed counts; days without counts are left out of the percentages.')+'</div>';
   h+=chartSvg(keys,series,pct,t);
@@ -691,13 +698,13 @@ function buildTrends(){
     if(TR.metric==='util'||TR.metric==='oee')return '<td style="background:linear-gradient(90deg,#cfe3f8 '+Math.min(100,v)+'%,#fff '+Math.min(100,v)+'%)"><b style="display:inline">'+v.toFixed(1)+'%</b></td>';
     return '<td class="'+effClass(v/100,t)+'"><b style="display:inline">'+v.toFixed(1)+'%</b></td>';
   }
-  h+='<div class="card tw"><table class="ov"><tr><th>'+(TR.group==="month"?"MONTH":(TR.group==="week"?"WEEK OF":"DAY"))+'</th>'+TRACKED.map(function(l){return '<th>'+l+'</th>'}).join("")+'<th>ALL LINES</th></tr>';
+  h+='<details class="hu" style="margin-top:12px"><summary>Show the numbers</summary><div class="card tw" style="margin-top:8px"><table class="ov"><tr><th>'+(TR.group==="month"?"MONTH":(TR.group==="week"?"WEEK OF":"DAY"))+'</th>'+TRACKED.map(function(l){return '<th>'+l+'</th>'}).join("")+'<th>ALL LINES</th></tr>';
   keys.slice().reverse().forEach(function(k){
     var i=keys.indexOf(k);
     h+='<tr><td class="ln" style="font-size:13px">'+k+'</td>'+series.map(function(s){return cell(s.v[i])}).join("")+cell(allV[i])+'</tr>';
   });
-  h+='</table></div>'+trSummary(data)+'<div class="hint">Efficiency = cases made / cases the schedule calls for in hours with counts. Made vs scheduled = cases made / cases scheduled on days with counts. Hours on target = hours at or above the YES line / hours with counts. Green meets the YES line, amber is within 10 points.</div>';
-  return h;
+  h+='</table></div></details>'+'<div class="hint">Efficiency = cases made / cases the schedule calls for in hours with counts. Made vs scheduled = cases made / cases scheduled on days with counts. Hours on target = hours at or above the YES line / hours with counts. Green meets the YES line, amber is within 10 points.</div>'+trSummary(data);
+  var pk=pickSec(h,TR.sec||'chart');return pk.head+pk.body;
 }
 async function exportXlsx(){
   if(typeof XLSX.writeFile!=="function"){alert("This copy of the page cannot make Excel files.");return}
@@ -960,16 +967,22 @@ function buildLine(line,date){
     h+='<label class="dn"><input type="checkbox" data-done="'+line+'|'+q.ri+'|'+selH+'"'+(q.done?" checked":"")+'> order finished'+(q.done&&(q.short||0)>=0.5?' <span class="short">short '+fmt(rnd(q.short))+'</span>':'')+'</label></div>';
   });
   h+='<input class="note" placeholder="Note for this hour (downtime, jam, ...)" data-note="'+nk+'" value="'+esc(S.notes[nk]||"")+'"></div>';
-  // 5. hour log
-  h+='<details class="hu" style="margin-top:12px"><summary>Hour-by-hour table</summary><div class="tw"><table class="hr" style="margin-top:0"><thead><tr><th>HOUR</th><th>PRODUCTS</th><th style="text-align:right">EXPECTED</th><th style="text-align:right">ACTUAL</th><th class="c">RESULT</th><th class="c">EFFICIENCY</th></tr></thead><tbody>';
-  var ga=0,gt=0;
-  for(var i=0;i<12;i++){
-    var hI=h0+i,HH=res.hours[hI],ok=hourOK(HH,t),ee=effHour(HH,res.runs),act=0,any=false;
-    HH.prods.forEach(function(q){if(q.act!=null){any=true;act+=q.act}});
-    if(ee){ga+=ee.act;gt+=ee.tgt}
-    h+='<tr class="lg'+(hI===selH?" sel":"")+(hI===curH?" cur":"")+'" data-hsel="'+hI+'"><td class="hrc">'+hr(HH.hs)+'-'+hr(HH.he)+(hI===curH?'<span class="nowp">NOW</span>':'')+'</td><td class="pr">'+(HH.prods.length?HH.prods.map(function(q){return '<span class="sw" style="background:'+prodColor(q.item)[1]+'"></span>'+esc(q.item.slice(-4))}).join(" &nbsp;"):'<span style="color:#9aa5b5;font-style:italic">nothing scheduled</span>')+'</td><td class="ex">'+fmt(HH.exp)+'</td><td class="ex">'+(any?fmt(rnd(act)):'<span style="color:#b4bdca">&ndash;</span>')+'</td><td style="text-align:center">'+(ok==null?'<span style="color:#b4bdca">&mdash;</span>':(ok?'<span class="res y">&#10004; YES</span>':'<span class="res n">&#10006; NO</span>'))+'</td><td style="text-align:center">'+(ee?'<span class="pl '+effClass(ee.act/ee.tgt,t)+'">'+rnd(100*ee.act/ee.tgt)+'%</span>':'<span style="color:#b4bdca">&mdash;</span>')+'</td></tr>';
-  }
-  h+='<tr><td colspan="6" class="effsum '+(gt>0?effClass(ga/gt,t):"c-mut")+'">'+(sh===0?"1ST":"2ND")+' SHIFT EFFICIENCY &nbsp; '+(gt>0?rnd(100*ga/gt)+'% (made '+fmt(rnd(ga))+' of '+fmt(rnd(gt))+' scheduled-rate cases, hours with counts only)':'no counts yet')+'</td></tr></tbody></table></div></details>';
+  // 5. hour log: what ran in every hour, both shifts
+  h+='<h3 class="gh" style="margin-top:18px">Hour by hour: what ran</h3>';
+  [0,1].forEach(function(s2){
+    var b0=s2*12,ga=0,gt=0,rows='';
+    for(var i=0;i<12;i++){
+      var hI=b0+i,HH=res.hours[hI],ok=hourOK(HH,t),ee=effHour(HH,res.runs),act=0,any=false;
+      HH.prods.forEach(function(q){if(q.act!=null){any=true;act+=q.act}});
+      if(ee){ga+=ee.act;gt+=ee.tgt}
+      var what=HH.prods.length?HH.prods.map(function(q){var r=res.runs[q.ri]||{};
+        return '<div class="wr"><span class="sw" style="background:'+prodColor(q.item)[1]+'"></span><b>'+esc(String(q.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,46))+(HH.prods.length>1?' <span class="sub">&middot; expected '+fmt(rnd(q.exp))+(q.act!=null?', made '+fmt(rnd(q.act)):'')+'</span>':'')+'</div>'}).join(""):'<span style="color:#9aa5b5;font-style:italic">nothing scheduled</span>';
+      var dv=any&&HH.exp>0?rnd(act-HH.exp):null;
+      rows+='<tr class="lg'+(hI===selH?" sel":"")+(hI===curH?" cur":"")+'" data-hsel="'+hI+'"><td class="hrc">'+hr(HH.hs)+'-'+hr(HH.he)+(hI===curH?'<span class="nowp">NOW</span>':'')+'</td><td class="pr">'+what+'</td><td class="ex">'+(HH.exp>0?fmt(HH.exp):'<span style="color:#b4bdca">&ndash;</span>')+'</td><td class="ex">'+(any?'<b>'+fmt(rnd(act))+'</b>':'<span style="color:#b4bdca">&ndash;</span>')+'</td><td class="ex">'+(dv==null?'<span style="color:#b4bdca">&ndash;</span>':'<span style="color:'+(dv>=0?'var(--okfg)':'var(--badfg)')+'">'+(dv>=0?'+':'')+fmt(dv)+'</span>')+'</td><td style="text-align:center">'+(ok==null?'<span style="color:#b4bdca">&mdash;</span>':(ok?'<span class="res y">&#10004; YES</span>':'<span class="res n">&#10006; NO</span>'))+'</td><td style="text-align:center">'+(ee?'<span class="pl '+effClass(ee.act/ee.tgt,t)+'">'+rnd(100*ee.act/ee.tgt)+'%</span>':'<span style="color:#b4bdca">&mdash;</span>')+'</td></tr>';
+    }
+    h+='<div class="card tw" style="margin-bottom:12px"><table class="hr" style="margin:0"><thead><tr><th colspan="7" style="background:var(--ink);color:#fff">'+(s2===0?"1ST":"2ND")+' SHIFT &nbsp; '+clock(DAY0+60*b0)+' - '+clock(DAY0+60*(b0+12))+'</th></tr><tr><th>HOUR</th><th>WHAT RAN</th><th style="text-align:right">EXPECTED</th><th style="text-align:right">MADE</th><th style="text-align:right">+/-</th><th class="c">ON TARGET</th><th class="c">EFFICIENCY</th></tr></thead><tbody>'+rows+
+      '<tr><td colspan="7" class="effsum '+(gt>0?effClass(ga/gt,t):"c-mut")+'">'+(s2===0?"1ST":"2ND")+' SHIFT EFFICIENCY &nbsp; '+(gt>0?rnd(100*ga/gt)+'% (made '+fmt(rnd(ga))+' of '+fmt(rnd(gt))+' scheduled-rate cases, hours with counts only)':'no counts yet')+'</td></tr></tbody></table></div>';
+  });
   h+='<div class="hint">Tap an hour above (or a row) to enter or fix its counts. Blue = from L2L, type over it to correct. Bars: filled part = cases made so far.</div>';
   return h;
 }
@@ -1058,7 +1071,9 @@ function runTable(runs,now,full){
     h+='<tr'+cur+'>'+C.map(function(c){return '<td'+(c[3]?' class="r"':'')+'>'+c[1](r)+'</td>'}).join("")+'</tr>'});
   return h+'</table>';
 }
-var FS={metric:"util"};
+var FS={metric:"util",sec:"ov"};
+function segNav(list,cur,attr){return '<div class="seg">'+list.map(function(x){return '<button class="'+(x[0]===cur?'on':'')+'" data-'+attr+'="'+x[0]+'">'+x[1]+'</button>'}).join("")+'</div>'}
+function pickSec(h,cur){var p=h.split("\u0001"),head=p[0],map={};for(var i=1;i<p.length;i+=2)map[p[i]]=p[i+1]||"";return {head:head,body:(cur in map)?map[cur]:""}}
 function fsStats(){
   var H=capH(),days={},runsAll=[],prod={},line={};
   allDates().forEach(function(d){
@@ -1084,12 +1099,18 @@ function fsCell(o,metric,H,nL){
 function fsRanges(ds){var out=[],i=0;while(i<ds.length){var j=i;while(j+1<ds.length&&ds[j+1]===addDays(ds[j],dowI(ds[j])===4?3:1))j++;out.push(j>i?pretty(ds[i])+" to "+pretty(ds[j]):pretty(ds[i]));i=j+1}return out}
 function dowI(d){return (new Date(d+"T12:00:00").getDay()+6)%7}
 function buildFull(date){
+  var h=buildFullAll(date),p=h.split("\u0001");if(p.length<3)return h;
+  var pk=pickSec(h,FS.sec);
+  return pk.head+segNav([["ov","Overview"],["ln","Lines and products"],["pb","Problems"],["day","Day detail"]],FS.sec,"fsec")+pk.body;
+}
+function buildFullAll(date){
   var st=fsStats(),days=st.days,ds=Object.keys(days).sort(),H=st.H,nL=TRACKED.length;
   var h='<h2>Full schedule</h2>';
   if(!ds.length)return h+'<div class="sub">No schedule loaded yet.</div>';
   var T={need:0,made:0,madeNeed:0,hrs:0,runs:0};
   ds.forEach(function(d){var o=days[d];T.need+=o.need;T.made+=o.made;T.madeNeed+=o.madeNeed;T.hrs+=o.hrs;T.runs+=o.runs});
   var kpi=function(a,b,c){return '<div class="kp"><b>'+a+'</b><span>'+b+'</span><i>'+c+'</i></div>'};
+  h+='\u0001ov\u0001';
   h+='<div class="sub" style="margin-bottom:8px">Everything in the schedule data: '+pretty(ds[0])+' to '+pretty(ds[ds.length-1])+'. Tap a week below to open its first day.</div><div class="kps">'+
     kpi(ds.length,'days scheduled','with at least one run')+kpi(fmt(rnd(T.runs)),'runs','across '+TRACKED.join(", "))+kpi(fmt(rnd(T.need)),'cases scheduled','sum of CASES NEEDED')+
     kpi(T.madeNeed>0?(100*T.made/T.madeNeed).toFixed(1)+'%':'&ndash;','made vs scheduled','CASES MFG. &divide; CASES NEEDED on runs that have a CASES MFG. entry')+
@@ -1116,7 +1137,7 @@ function buildFull(date){
   h+='<div class="card tw"><table class="ov wkt">'+whead+weeks.slice(0,12).map(wrow).join("")+'</table></div>';
   if(weeks.length>12)h+='<details style="margin-bottom:8px"><summary class="sub" style="cursor:pointer">Show the other '+(weeks.length-12)+' weeks</summary><div class="card tw"><table class="ov wkt">'+whead+weeks.slice(12).map(wrow).join("")+'</table></div></details>';
   // lines table
-  h+='<h3 class="gh">By line</h3><div class="card fs tw"><table><tr><th>LINE</th><th class="r">DAYS RUN</th><th class="r">RUNS</th><th class="r">RUNS / DAY</th><th class="r">CHANGEOVERS</th><th class="r">AVG RUN (h)</th><th class="r">HOURS</th><th class="r">UTILIZATION</th><th class="r">CASES SCHEDULED</th><th class="r">MADE vs SCHEDULED</th></tr>';
+  h+='\u0001ln\u0001<h3 class="gh">By line</h3><div class="card fs tw"><table><tr><th>LINE</th><th class="r">DAYS RUN</th><th class="r">RUNS</th><th class="r">RUNS / DAY</th><th class="r">CHANGEOVERS</th><th class="r">AVG RUN (h)</th><th class="r">HOURS</th><th class="r">UTILIZATION</th><th class="r">CASES SCHEDULED</th><th class="r">MADE vs SCHEDULED</th></tr>';
   TRACKED.forEach(function(l){var L=st.line[l];if(!L)return;
     h+='<tr><td><b>'+l+'</b></td><td class="r">'+L.days+'</td><td class="r">'+L.runs+'</td><td class="r">'+(L.runs/L.days).toFixed(1)+'</td><td class="r">'+Math.max(0,L.runs-L.days)+'</td><td class="r">'+(L.hrs/L.runs).toFixed(1)+'</td><td class="r">'+fmt(rnd(L.hrs))+'</td><td class="r"><b>'+(100*L.hrs/(H*L.days)).toFixed(0)+'%</b></td><td class="r">'+fmt(rnd(L.need))+'</td><td class="r">'+(L.madeNeed>0?'<b>'+(100*L.made/L.madeNeed).toFixed(1)+'%</b>':'&ndash;')+'</td></tr>'});
   h+='</table></div><div class="sub">Changeovers = runs minus days run (each extra run on the same day is a product change). Utilization counts only days the line had a run.</div>';
@@ -1132,7 +1153,7 @@ function buildFull(date){
   var slow=st.runs.filter(function(x){return x.r.made>0&&x.r.need>=500&&x.r.made<0.9*x.r.need}).sort(function(a,b){return (b.r.need-b.r.made)-(a.r.need-a.r.made)});
   var hmis=st.runs.filter(function(x){return x.r.hrs>0&&x.r.std>0&&Math.abs(x.r.hrs-x.r.need/x.r.std)>0.05*x.r.hrs});
   var noAct=ds.filter(function(d){return d<today&&days[d].made===0}).length;
-  h+='<h3 class="gh">Gaps and problems</h3><div class="card" style="padding:12px 14px">';
+  h+='\u0001pb\u0001<h3 class="gh">Gaps and problems</h3><div class="card" style="padding:12px 14px">';
   h+='<p><b>'+miss.length+'</b> weekday(s) with no schedule loaded'+(miss.length?': '+esc(fsRanges(miss).slice(0,14).join("; "))+(fsRanges(miss).length>14?' ...':''):'')+'. Upload those weeks to fill the gaps.</p>';
   h+='<p><b>'+noAct+'</b> past day(s) have no CASES MFG. entries, so they have no made vs scheduled number.</p>';
   h+='<p><b>'+over.length+'</b> line-day(s) scheduled for more than '+H+' h'+(over.length?': '+over.sort(function(a,b){return b[2]-a[2]}).slice(0,6).map(function(x){return pretty(x[0])+' '+x[1]+' ('+x[2].toFixed(1)+' h)'}).join("; "):'')+'.</p>';
@@ -1141,7 +1162,7 @@ function buildFull(date){
   h+='<details style="margin:8px 0"><summary class="sub" style="cursor:pointer">How these numbers are calculated</summary><div class="card note-card" style="margin-top:6px">Run hours = the workbook TOTAL HR, or cases &divide; STANDARD/HR when blank. Utilization = scheduled run hours &divide; ('+H+' h &times; lines with a run). Made vs scheduled = CASES MFG. &divide; CASES NEEDED, using only runs where CASES MFG. was filled in, so unfilled runs do not drag a day down. Missing weekdays are Mon-Fri dates between the first and last loaded day with no schedule. Capacity hours come from the box at the top (default 20).</div></details>';
   // selected day detail
   var lines=ALL.filter(function(l){return allRunsOf(l,date).length});
-  h+='<h2 style="margin-top:18px">'+dayname(date)+' '+pretty(date)+'</h2>';
+  h+='\u0001day\u0001<h2>'+dayname(date)+' '+pretty(date)+'</h2>';
   if(!lines.length)return h+'<div class="sub">No schedule for this day. Pick a day in the calendar.</div>';
   var now=date===opDay()?nowRel(date):null,dt=days[date];
   if(dt){var c1=dt.madeNeed>0?' &middot; made '+fmt(rnd(dt.made))+' of '+fmt(rnd(dt.madeNeed))+' ('+(100*dt.made/dt.madeNeed).toFixed(1)+'%)':'';
@@ -1186,8 +1207,10 @@ function onFile(f){
   fr.readAsArrayBuffer(f);
 }
 document.addEventListener("click",function(e){
-  var t=e.target.closest("[data-fday],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
-  if(t.dataset.fday){$("date").value=t.dataset.fday;applyAll();render();return}
+  var t=e.target.closest("[data-fday],[data-fsec],[data-trsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  if(t.dataset.fsec){FS.sec=t.dataset.fsec;render();window.scrollTo(0,0);return}
+  if(t.dataset.trsec){TR.sec=t.dataset.trsec;render();return}
+  if(t.dataset.fday){$("date").value=t.dataset.fday;FS.sec="day";applyAll();render();window.scrollTo(0,0);return}
   if(t.dataset.hsel!=null){SEL[CURSEL.k]=+t.dataset.hsel;render();return}
   if(t.dataset.hnav){SEL[CURSEL.k]=Math.max(0,Math.min(NH-1,CURSEL.h+(+t.dataset.hnav)));render();return}
   if(t.dataset.hnow){delete SEL[CURSEL.k];render();return}
