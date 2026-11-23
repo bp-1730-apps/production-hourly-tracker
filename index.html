@@ -110,6 +110,50 @@ table.ov td.c-none{border:1px solid var(--line)}
 .upc td{padding:3px 8px}.upc input{width:70px;text-align:center;padding:4px;border:1px solid var(--line);border-radius:6px}.upc input.need{background:var(--badbg);border-color:var(--badfg)}
 .welcome{padding:30px;text-align:center;margin-top:24px}.welcome h2{font-size:24px}
 .foot{padding:4px 14px 14px;color:var(--muted);font-size:11px;text-align:center}
+
+/* redesign: strip, timeline, schedule board, entry card */
+.strip{display:grid;grid-template-columns:1.25fr 1fr 1fr 1.3fr;gap:10px}
+@media(max-width:1000px){.strip{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.strip{grid-template-columns:1fr}}
+details.hu{margin-top:10px;background:#fafbfd;border:1px solid var(--line);border-radius:8px;padding:2px 12px}
+details.hu summary{cursor:pointer;padding:8px 0;font-weight:600;color:var(--ink)}
+details.hu .alerts{margin:0 0 10px}
+.seg{display:inline-flex;margin:14px 0 8px;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+.seg button{border:0;background:#fff;padding:9px 16px;font-weight:600;color:var(--muted)}
+.seg button.on{background:var(--ink);color:#fff}
+.tl,.gantt{min-width:680px}
+.tlh{display:grid;grid-template-columns:repeat(12,1fr);font-size:11px;color:var(--muted);font-weight:600}
+.tlh div{padding:4px 0 4px 4px;border-left:1px solid var(--line)}
+.tlt{position:relative;background:#fafbfd;border:1px solid var(--line);border-radius:6px;overflow:hidden}
+.tlt u{position:absolute;top:0;bottom:0;width:0;border-left:1px solid #e6ebf2}
+.tlb{position:absolute;height:30px;border:1.5px solid;border-radius:6px;overflow:hidden;font-size:12px;line-height:27px;white-space:nowrap;cursor:pointer}
+.tlb i{position:absolute;left:0;top:0;bottom:0;opacity:.45}
+.tlb span{position:relative;padding:0 7px;color:#1b2733;font-weight:600}
+.tlnow{position:absolute;top:0;bottom:0;width:2px;background:#d9423a;z-index:2}
+.tlr{display:grid;grid-template-columns:repeat(12,1fr);gap:4px;margin-top:6px}
+.tlc{border:1.5px solid var(--line);background:#fff;border-radius:8px;padding:6px 2px;min-height:58px;color:var(--text);display:flex;flex-direction:column;align-items:center;justify-content:center}
+.tlc b{font-size:16px}.tlc small{color:var(--muted);font-size:11px}.tlc .mn{color:var(--badfg);font-weight:700}
+.tlc.ok{background:var(--okbg);border-color:#b7e2c3}.tlc.bad{background:var(--badbg);border-color:#f3b9b4}
+.tlc.now{box-shadow:0 0 0 2px var(--gold) inset}.tlc.sel{outline:3px solid var(--accent);outline-offset:1px}
+.entry{margin-top:12px;padding:12px 14px}
+.eh{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+.eh .et{font-size:20px;font-weight:700;color:var(--ink)}.eh .er{margin-left:auto}
+.entry .btn.ico{width:44px;height:44px;font-size:22px}
+.er2{display:grid;grid-template-columns:minmax(200px,2fr) 1fr 150px auto;gap:10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+@media(max-width:700px){.er2{grid-template-columns:1fr 1fr}.er2 .ep{grid-column:1/3}}
+.sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px}
+input.act.big{width:100%;height:52px;font-size:22px;text-align:right;border-radius:8px}
+.dn{display:flex;align-items:center;gap:8px;font-size:14px}.dn input{width:22px;height:22px}
+.entry input.note{margin-top:8px;height:42px}
+tr.lg{cursor:pointer}tr.lg.sel td{outline:0;background:#e6f0fb}
+table.hr td.ex{font-size:14px}
+.gantt{display:grid;grid-template-columns:96px 1fr 0}
+.gantt .tlh{grid-column:2;grid-template-columns:repeat(24,1fr)}
+.gantt .gl{grid-column:1;display:flex;flex-direction:column;justify-content:center;padding-right:8px}
+.gantt .gl b{font-size:16px;color:var(--ink)}.gantt .gl small{color:var(--muted);font-size:11px}
+.gantt .gt{grid-column:2;margin:4px 0}
+.gantt .gr{display:none}
+.gantt .tlt u:nth-of-type(12){border-left:2px solid #9fb0c6}
 </style>
 </head>
 <body>
@@ -164,8 +208,8 @@ var DEF_UPC={"005307":12,"005415":6,"008184":6,"005305":12,"005306":12,"005375":
 var STORE="hourly_tracker_html_v2", OLDSTORE="hourly_tracker_html_v1";
 var S={syncLast:"",syncMig:0,capH:20,plans:{},shift:{},acts:{},dones:{},notes:{},running:{},upc:{},l2l:{},stamp:""};
 var REMOTE={}, RECENT={}, ARCH={}, IDX={}, HLOAD={}, TR={from:"",to:"",group:"week",metric:"sched",busy:false,msg:"",once:false};
-var showAllChips=false;
-var AUTO={}, STATS={}, MISSING={}, tab="MP4", view="auto", l2lAt=null, l2lErr="", feedUpdated="", schedErr="", pulling=false, rT=null;
+var showAllChips=false,SEL={};
+var AUTO={}, STATS={}, MISSING={}, tab="Board", view="auto", l2lAt=null, l2lErr="", feedUpdated="", schedErr="", pulling=false, rT=null;
 
 // ---------- helpers
 function $(id){return document.getElementById(id)}
@@ -704,13 +748,14 @@ function render(){
   var ae=document.activeElement,fk=null,fpos=0;
   if(ae&&ae.dataset&&ae.dataset.k){fk=ae.dataset.k;try{fpos=ae.selectionStart}catch(e){}}
   var date=curDate(),t=thr(),th="";
+  th+='<button class="tab'+("Board"===tab?" on":"")+'" data-tab="Board">Board</button>';
   TRACKED.forEach(function(l){th+='<button class="tab'+(l===tab?" on":"")+'" data-tab="'+l+'"><i class="'+tabDot(l,date,t)+'"></i>'+l+'</button>'});
-  [["Overview",""],["Trends"," sep"],["Full schedule",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
+  [["Trends"," sep"],["Full schedule",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
   $("tabs").innerHTML=th;
   var h="";
   if(tab==="Trends")h=buildTrends();
   else if(!date)h='<div class="card welcome"><h2>Waiting for the schedule</h2><p class="sub" style="font-size:15px">It loads by itself from schedule.json. Or open Settings (gear) and choose the weekly workbook.</p>'+(schedErr?'<p class="sub" style="color:var(--badfg)">'+esc(schedErr)+'</p>':'')+'</div>';
-  else if(tab==="Overview")h=buildOverview(date);
+  else if(tab==="Board")h=buildBoard(date);
   else if(tab==="Full schedule")h=buildFull(date);
   else h=buildLine(tab,date);
   $("main").innerHTML=h;
@@ -749,6 +794,29 @@ function untimedLine(line,date,all){
   h+='</div><div class="card fs tw" style="margin-top:12px">'+runTable(all,null)+'</div>';
   return h;
 }
+// ---- product colors: soft fill + stronger edge, used only to tell products apart (status colors stay for good/bad)
+var PFILL=["#dbe7f6","#fde4cf","#dff1e3","#efe0f5","#f9f0c8","#d9f0ee","#f6dce2","#e4e7d0","#e1dff5","#f0e3d3"];
+var PEDGE=["#6c9bd0","#e5a05c","#5fb27a","#a77bc4","#d1b840","#4aa8a0","#d0788c","#9aa35a","#8a82cf","#b98c5a"];
+function prodColor(item){var k=k6(item)||String(item),n=0;for(var i=0;i<k.length;i++)n=(n*31+k.charCodeAt(i))%1000;return [PFILL[n%10],PEDGE[n%10]]}
+function lanes(runs){            // stack overlapping bars on separate lanes
+  var ends=[],out=[];
+  runs.map(function(r,ri){return {r:r,ri:ri}}).sort(function(a,b){return a.r.s-b.r.s}).forEach(function(x){
+    var l=0;while(ends[l]!=null&&ends[l]>x.r.s+0.5)l++;ends[l]=pend(x.r);out[x.ri]=l});
+  return {lane:out,count:Math.max(1,ends.length)};
+}
+function barsHtml(line,date,runs,w0,span,now,live,click){
+  var L=lanes(runs),h='<div class="tlt" style="height:'+(L.count*34+6)+'px">';
+  for(var g=1;g<span/60;g++)h+='<u style="left:'+(g*6000/span)+'%"></u>';
+  runs.forEach(function(r,ri){
+    var s=Math.max(r.s,w0),e=Math.min(pend(r),w0+span);if(e<=s)return;
+    var made=madeOf(date,line,ri),pct=r.need>0?Math.min(1,made/r.need):0,c=prodColor(r.item);
+    h+='<div class="tlb"'+(click?' data-gline="'+line+'"':'')+' style="left:'+((s-w0)/span*100)+'%;width:'+((e-s)/span*100)+'%;top:'+(L.lane[ri]*34+4)+'px;background:'+c[0]+';border-color:'+c[1]+'" title="'+esc(r.item+" "+r.name+" | "+clock(r.s)+" - "+clock(pend(r))+" | "+fmt(rnd(made))+" of "+fmt(rnd(r.need))+" cases")+'"><i style="width:'+(pct*100)+'%;background:'+c[1]+'"></i><span>'+esc(r.item.slice(-4))+' '+esc(r.name)+'</span></div>';
+  });
+  if(live&&now>=w0&&now<=w0+span)h+='<div class="tlnow" style="left:'+((now-w0)/span*100)+'%"></div>';
+  return h+'</div>';
+}
+function hourHead(w0,n){var h='<div class="tlh" style="grid-template-columns:repeat('+n+',1fr)">';for(var i=0;i<n;i++)h+='<div>'+hr(w0+60*i)+'</div>';return h+'</div>'}
+var CURSEL={k:"",h:0};
 function buildLine(line,date){
   var runs=runsSorted(line,date),all=allRunsOf(line,date);
   if(!runs.length){
@@ -757,19 +825,29 @@ function buildLine(line,date){
   }
   var t=thr(),shift=DAY0,ls=lineStatus(line,date,t),nums=ls.nums,now=nowRel(date),res=engine(line,date);
   var live=shift-60<=now&&now<=shift+NH*60+120,curH=live?Math.floor((now-shift)/60):-1,col=COL[ls.cls];
-  var h='<div class="hero"><div class="card kpi st" style="background:'+col[0]+';color:'+col[1]+';border-color:'+col[1]+'"><div class="lab">'+line+' &middot; '+pretty(date)+'</div><div class="big">'+esc(ls.head)+'</div><div style="font-weight:600;font-size:15px;min-height:20px">'+esc(ls.mt)+'</div></div>';
+  var key=date+"|"+line,selH=SEL[key];
+  if(selH==null){
+    if(curH>=0&&curH<NH)selH=curH;
+    else{selH=-1;res.hours.forEach(function(H,i){if(H.prods.some(function(q){return q.act!=null}))selH=i});
+      if(selH<0){selH=0;for(var i=0;i<NH;i++)if(res.hours[i].prods.length){selH=i;break}}}
+  }
+  CURSEL={k:key,h:selH};
+  var sh=selH<12?0:1,h0=sh*12;
+  // 1. status strip: am I on plan / how much / how efficient / what is running and next
+  var et=effTotal(res,rng(0,NH)),cur=null,nxt=null;
+  runs.forEach(function(r){var p=pend(r);if(live&&r.s<=now&&now<p)cur=r;if(r.s>now&&(!nxt||r.s<nxt.s))nxt=r});
+  var h='<div class="strip"><div class="card kpi st" style="background:'+col[0]+';color:'+col[1]+';border-color:'+col[1]+'"><div class="lab">'+line+' &middot; '+pretty(date)+'</div><div class="big">'+esc(ls.head)+'</div><div style="font-weight:600;font-size:14px;min-height:18px">'+esc(ls.mt)+'</div></div>';
   h+='<div class="card kpi"><div class="lab">MADE vs SCHEDULED</div>';
-  if(nums){var pc=nums.exp?Math.min(1,nums.act/nums.exp):0,et=effTotal(res,rng(0,NH));
-    h+='<div class="big">'+fmt(rnd(nums.act))+' of '+fmt(nums.exp)+' cases</div><div class="bar2"><i style="width:'+(pc*100)+'%;background:'+col[1]+'"></i></div><div class="sub">through '+nums.thru+(et?' &nbsp;&middot;&nbsp; <span class="pl '+effClass(et.act/et.tgt,t)+'">Efficiency '+rnd(100*et.act/et.tgt)+'%</span>':'')+'</div>'}
-  else h+='<div class="big" style="color:var(--muted);font-size:17px;padding:6px 0 14px">No hourly actuals yet</div>';
-  h+='</div><div class="card kpi"><div class="lab">RIGHT NOW</div>';
-  if(live){h+='<div class="big">'+clock(now)+'</div><div class="sub">';
-    if(nums&&nums.exp_now!=null)h+='Expected by now: '+fmt(nums.exp_now)+'<br>';
-    if(nums&&nums.hour_exp!=null)h+='This hour: about '+fmt(nums.part)+' of '+fmt(nums.hour_exp);
-    h+='</div>'}
-  else h+='<div class="big" style="color:var(--muted);font-size:17px">Not running</div><div class="sub">Plan day '+clock(shift)+' to '+clock(shift+NH*60)+'</div>';
+  if(nums){var pc=nums.exp?Math.min(1,nums.act/nums.exp):0;h+='<div class="big">'+fmt(rnd(nums.act))+' <span class="sub" style="font-size:14px">of '+fmt(nums.exp)+'</span></div><div class="bar2"><i style="width:'+(pc*100)+'%;background:'+col[1]+'"></i></div><div class="sub">through '+nums.thru+'</div>'}
+  else h+='<div class="big" style="color:var(--muted);font-size:16px;padding:6px 0 14px">No counts yet</div>';
+  h+='</div><div class="card kpi"><div class="lab">EFFICIENCY</div>';
+  h+=et?'<div class="big"><span class="pl '+effClass(et.act/et.tgt,t)+'" style="font-size:20px">'+rnd(100*et.act/et.tgt)+'%</span></div><div class="sub">made '+fmt(rnd(et.act))+' of '+fmt(rnd(et.tgt))+' scheduled-rate cases</div>':'<div class="big" style="color:var(--muted);font-size:16px;padding:6px 0 14px">&mdash;</div>';
+  h+='</div><div class="card kpi"><div class="lab">'+(live?'NOW &middot; '+clock(now):'PLAN DAY')+'</div>';
+  if(live){h+='<div class="big" style="font-size:16px">'+(cur?'<b>'+esc(cur.item)+'</b> '+esc(cur.name.slice(0,26)):'Nothing scheduled')+'</div><div class="sub">'+(cur?'until '+clock(pend(cur)):'')+(nxt?(cur?' &middot; ':'')+'next '+esc(nxt.item)+' at '+clock(nxt.s):'')+'</div>'}
+  else h+='<div class="big" style="font-size:16px;color:var(--muted)">Not running</div><div class="sub">'+clock(shift)+' to '+clock(shift+NH*60)+'</div>';
   h+='</div></div>';
-  var runmap=S.running[date+"|"+line]||{},extra=ls.info.slice();
+  // 2. heads-up (one line, tap to open) and now-running chips
+  var runmap=S.running[key]||{},extra=ls.info.slice();
   Object.keys(runmap).sort(function(a,b){return runmap[a]-runmap[b]}).forEach(function(ris){
     var ri=+ris;if(ri>=runs.length)return;var r=runs[ri];
     var started=(runmap[ris]-new Date(date+"T00:00:00").getTime())/60000,late=rnd(started-r.s);
@@ -778,45 +856,62 @@ function buildLine(line,date){
     if(o.tracked)tx+=" Made "+fmt(rnd(o.made))+" of "+fmt(rnd(o.need))+"; "+fmt(rnd(o.due))+" due by the start of this hour: "+o.st+".";
     extra.push(["n",tx])});
   if(live&&!Object.keys(runmap).length)extra.push(["w","Tap the product that is running below so the tracker knows."]);
-  if(extra.length)h+='<div class="alerts">'+extra.map(function(x){return alertH(x[0],x[1])}).join("")+'</div>';
-  // running chips: the ones near now, plus any marked running; "All" shows every product
+  if(extra.length)h+='<details class="hu"><summary>Heads-up ('+extra.length+'): <span style="font-weight:400;color:var(--muted)">'+esc(extra[0][1].slice(0,95))+(extra[0][1].length>95?'...':'')+'</span></summary><div class="alerts">'+extra.map(function(x){return alertH(x[0],x[1])}).join("")+'</div></details>';
   var chips=[];
-  runs.forEach(function(r,i){var on=runmap[i]!=null,sn=live&&r.s<=now&&now<r.e,near=live&&r.s<=now+60&&pend(r)>=now-120;
+  runs.forEach(function(r,i){var on=runmap[i]!=null,sn=live&&r.s<=now&&now<pend(r),near=live&&r.s<=now+60&&pend(r)>=now-120;
     if(showAllChips||on||sn||near)chips.push('<button class="chip'+(on?" on":(sn?" sn":""))+'" data-run="'+i+'"><b>'+esc(r.item)+'</b><span>'+(on?"running &middot; ":"")+clock(r.s)+'</span></button>')});
-  h+='<div class="run"><span class="lab">NOW RUNNING</span>'+chips.join("")+'<button class="chip" data-chips="1">'+(showAllChips?"Fewer":"All products")+'</button></div>';
-  h+='<div class="tw"><table class="hr"><thead><tr><th>HOUR</th><th>PRODUCT</th><th class="c" style="text-align:right">EXPECTED</th><th class="c">ACTUAL</th><th class="c">DONE</th><th class="c">RESULT</th><th>NOTE</th></tr></thead><tbody>';
-  var vh=viewHours(live,curH),ga=0,gt=0;
-  vh.forEach(function(hI){
-    if(hI%12===0)h+='<tr><td colspan="7" class="shh">'+(hI<12?"1ST":"2ND")+' SHIFT &nbsp; '+hr(shift+60*hI)+' - '+hr(shift+60*(hI+12))+'</td></tr>';
-    var H=res.hours[hI],ok=hourOK(H,t),cls=hI===curH?"cur":(hI%2?"z":""),prods=H.prods.length?H.prods:[null],nk=date+"|"+line+"|"+hI,ee=effHour(H,res.runs);
-    if(ee){ga+=ee.act;gt+=ee.tgt}
-    prods.forEach(function(q,pi){
-      h+='<tr class="'+cls+'">';
-      if(pi===0)h+='<td class="hrc" rowspan="'+prods.length+'">'+hr(H.hs)+'-'+hr(H.he)+(hI===curH?'<span class="nowp">NOW</span>':'')+'</td>';
-      if(!q)h+='<td class="pr"><span style="font-style:italic;color:#9aa5b5">nothing scheduled</span></td><td class="ex" style="color:#9aa5b5">0</td><td></td><td></td>';
-      else{
-        var k=akey(date,line,hI,q.ri),manual=k in S.acts,auto=q.act!=null&&!manual;
-        h+='<td class="pr"><b>'+esc(q.item)+'</b><span>'+esc(q.name.slice(0,44))+'</span></td>';
-        h+='<td class="ex">'+fmt(rnd(q.exp))+(q.back>=0.5?'<span class="owes">owes '+fmt(rnd(q.back))+'</span>':'')+'</td>';
-        h+='<td style="text-align:center"><input class="act'+(auto?" auto":"")+'" inputmode="decimal" data-k="'+k+'" data-act="'+k+'" value="'+(q.act==null?"":rnd(q.act))+'"></td>';
-        h+='<td style="text-align:center"><input type="checkbox" data-done="'+line+'|'+q.ri+'|'+hI+'"'+(q.done?" checked":"")+'>'+(q.done&&(q.short||0)>=0.5?'<div class="short">short '+fmt(rnd(q.short))+'</div>':'')+'</td>';
-      }
-      if(pi===0){
-        var rc="";
-        if(ok!=null)rc+=ok?'<span class="res y">&#10004; YES</span>':'<span class="res n">&#10006; NO</span>';
-        if(ee)rc+='<div style="margin-top:3px"><span class="pl '+effClass(ee.act/ee.tgt,t)+'">'+rnd(100*ee.act/ee.tgt)+'%</span></div><div class="sub" style="font-size:11px">'+fmt(rnd(ee.act))+' / '+fmt(rnd(ee.tgt))+'</div>';
-        h+='<td rowspan="'+prods.length+'" style="text-align:center">'+(rc||'<span style="color:#b4bdca">&mdash;</span>')+'</td>';
-        h+='<td rowspan="'+prods.length+'" style="min-width:150px"><input class="note" data-note="'+nk+'" value="'+esc(S.notes[nk]||"")+'"></td>';
-      }
-      h+='</tr>';
-    });
-    if(hI%12===11||hI===vh[vh.length-1]){
-      h+='<tr><td colspan="7" class="effsum '+(gt>0?effClass(ga/gt,t):"c-mut")+'">'+(hI<12?"1ST":"2ND")+' SHIFT EFFICIENCY &nbsp; '+(gt>0?rnd(100*ga/gt)+'% &nbsp;(made '+fmt(rnd(ga))+' of '+fmt(rnd(gt))+' scheduled-rate cases, hours with counts only)':'no hourly counts yet')+'</td></tr>';
-      ga=gt=0;
-    }
+  h+='<div class="run"><span class="lab">TAP WHAT IS RUNNING</span>'+chips.join("")+'<button class="chip" data-chips="1">'+(showAllChips?"Fewer":"All products")+'</button></div>';
+  // 3. shift timeline: product bars (filled = made so far) with the hour results underneath
+  h+='<div class="seg"><button data-shsel="0" class="'+(sh===0?"on":"")+'">1st shift &nbsp;6am-6pm</button><button data-shsel="1" class="'+(sh===1?"on":"")+'">2nd shift &nbsp;6pm-6am</button></div>';
+  var w0=shift+60*h0;
+  h+='<div class="tw"><div class="tl">'+hourHead(w0,12)+barsHtml(line,date,runs,w0,720,now,live,false)+'<div class="tlr">';
+  for(var i=0;i<12;i++){
+    var hI=h0+i,H=res.hours[hI],ok=hourOK(H,t),act=0,any=false;H.prods.forEach(function(q){if(q.act!=null){any=true;act+=q.act}});
+    h+='<button class="tlc'+(ok==null?"":(ok?" ok":" bad"))+(hI===selH?" sel":"")+(hI===curH?" now":"")+'" data-hsel="'+hI+'"><b>'+(any?fmt(rnd(act)):"&ndash;")+'</b><small>of '+fmt(H.exp)+'</small>'+(ok===false&&H.exp>0?'<small class="mn">-'+rnd(Math.max(0,(H.exp-act)/H.exp)*60)+' min</small>':'')+'</button>';
+  }
+  h+='</div></div></div>';
+  // 4. enter counts for the chosen hour
+  var H=res.hours[selH],okS=hourOK(H,t),eeS=effHour(H,res.runs),nk=key+"|"+selH;
+  h+='<div class="card entry"><div class="eh"><button class="btn ico" data-hnav="-1" title="Earlier hour">&#8249;</button><div class="et">'+hr(H.hs)+' &ndash; '+hr(H.he)+(selH===curH?' <span class="nowp" style="display:inline-block">NOW</span>':'')+'</div><button class="btn ico" data-hnav="1" title="Later hour">&#8250;</button>'+(live&&selH!==curH?'<button class="btn" data-hnow="1">Go to now</button>':'')+'<div class="er">'+(okS==null?'':(okS?'<span class="res y">&#10004; YES</span>':'<span class="res n">&#10006; NO</span>'))+(eeS?' <span class="pl '+effClass(eeS.act/eeS.tgt,t)+'">'+rnd(100*eeS.act/eeS.tgt)+'% efficiency</span>':'')+'</div></div>';
+  if(!H.prods.length)h+='<div class="sub" style="padding:12px 4px">Nothing is scheduled in this hour.</div>';
+  H.prods.forEach(function(q){
+    var k=akey(date,line,selH,q.ri),manual=k in S.acts,auto=q.act!=null&&!manual,c=prodColor(q.item);
+    h+='<div class="er2"><div class="ep"><span class="sw" style="background:'+c[1]+'"></span><b>'+esc(q.item)+'</b> <span class="sub">'+esc(q.name.slice(0,48))+'</span></div>';
+    h+='<div class="ee">Expected <b>'+fmt(rnd(q.exp))+'</b>'+(q.back>=0.5?' <span class="owes">owes '+fmt(rnd(q.back))+'</span>':'')+'</div>';
+    h+='<input class="act big'+(auto?" auto":"")+'" inputmode="decimal" placeholder="actual" data-k="'+k+'" data-act="'+k+'" value="'+(q.act==null?"":rnd(q.act))+'">';
+    h+='<label class="dn"><input type="checkbox" data-done="'+line+'|'+q.ri+'|'+selH+'"'+(q.done?" checked":"")+'> order finished'+(q.done&&(q.short||0)>=0.5?' <span class="short">short '+fmt(rnd(q.short))+'</span>':'')+'</label></div>';
   });
-  h+='</tbody></table></div><div class="hint">Blue = from L2L; type over it to correct. YES = made at least the YES line of expected. Efficiency = made / scheduled for that hour. Tick Done only when an order is finished or being shorted.</div>';
+  h+='<input class="note" placeholder="Note for this hour (downtime, jam, ...)" data-note="'+nk+'" value="'+esc(S.notes[nk]||"")+'"></div>';
+  // 5. hour log
+  h+='<details class="hu" style="margin-top:12px"><summary>Hour-by-hour table</summary><div class="tw"><table class="hr" style="margin-top:0"><thead><tr><th>HOUR</th><th>PRODUCTS</th><th style="text-align:right">EXPECTED</th><th style="text-align:right">ACTUAL</th><th class="c">RESULT</th><th class="c">EFFICIENCY</th></tr></thead><tbody>';
+  var ga=0,gt=0;
+  for(var i=0;i<12;i++){
+    var hI=h0+i,HH=res.hours[hI],ok=hourOK(HH,t),ee=effHour(HH,res.runs),act=0,any=false;
+    HH.prods.forEach(function(q){if(q.act!=null){any=true;act+=q.act}});
+    if(ee){ga+=ee.act;gt+=ee.tgt}
+    h+='<tr class="lg'+(hI===selH?" sel":"")+(hI===curH?" cur":"")+'" data-hsel="'+hI+'"><td class="hrc">'+hr(HH.hs)+'-'+hr(HH.he)+(hI===curH?'<span class="nowp">NOW</span>':'')+'</td><td class="pr">'+(HH.prods.length?HH.prods.map(function(q){return '<span class="sw" style="background:'+prodColor(q.item)[1]+'"></span>'+esc(q.item.slice(-4))}).join(" &nbsp;"):'<span style="color:#9aa5b5;font-style:italic">nothing scheduled</span>')+'</td><td class="ex">'+fmt(HH.exp)+'</td><td class="ex">'+(any?fmt(rnd(act)):'<span style="color:#b4bdca">&ndash;</span>')+'</td><td style="text-align:center">'+(ok==null?'<span style="color:#b4bdca">&mdash;</span>':(ok?'<span class="res y">&#10004; YES</span>':'<span class="res n">&#10006; NO</span>'))+'</td><td style="text-align:center">'+(ee?'<span class="pl '+effClass(ee.act/ee.tgt,t)+'">'+rnd(100*ee.act/ee.tgt)+'%</span>':'<span style="color:#b4bdca">&mdash;</span>')+'</td></tr>';
+  }
+  h+='<tr><td colspan="6" class="effsum '+(gt>0?effClass(ga/gt,t):"c-mut")+'">'+(sh===0?"1ST":"2ND")+' SHIFT EFFICIENCY &nbsp; '+(gt>0?rnd(100*ga/gt)+'% (made '+fmt(rnd(ga))+' of '+fmt(rnd(gt))+' scheduled-rate cases, hours with counts only)':'no counts yet')+'</td></tr></tbody></table></div></details>';
+  h+='<div class="hint">Tap an hour above (or a row) to enter or fix its counts. Blue = from L2L, type over it to correct. Bars: filled part = cases made so far.</div>';
   return h;
+}
+// every line on one 24-hour board: the schedule as bars, with progress and a now marker
+function ganttHtml(date){
+  var lines=TRACKED.filter(function(l){return runsSorted(l,date).length});
+  if(!lines.length)return "";
+  var now=nowRel(date),live=DAY0-60<=now&&now<=DAY0+NH*60+120,H=capH();
+  var h='<h3 class="gh">Schedule board</h3><div class="sub" style="margin-bottom:6px">Each bar is a run (colored by product); the dark fill is how much of it is made. Tap a bar to open that line.</div><div class="tw"><div class="gantt"><div class="gl"></div>'+hourHead(DAY0,24)+'<div class="gr"></div>';
+  lines.forEach(function(l){
+    var runs=runsSorted(l,date),u=Math.round(100*lineHrs(l,date)/H);
+    h+='<div class="gl"><b>'+l+'</b><small>'+u+'% of '+H+' h</small></div>'+'<div class="gt">'+barsHtml(l,date,runs,DAY0,NH*60,now,live,true)+'</div><div class="gr"></div>';
+  });
+  return h+'</div></div>';
+}
+function buildBoard(date){
+  var h='<h2>Board</h2><div class="sub" style="margin-bottom:4px">'+dayname(date)+' '+pretty(date)+'</div>';
+  var g=ganttHtml(date);
+  if(!g&&!ALL.some(function(l){return runsSorted(l,date).length}))return h+buildOverview(date).replace(/^<h2>.*?<\/div>/,'');
+  return h+g+buildOverview(date).replace(/<h2>Overview<\/h2><div class="sub"[^>]*>.*?<\/div>/,'<h3 class="gh">Hourly results</h3>');
 }
 function capacityHtml(date){
   var H=capH(),mon=mondayOf(date),days=[];
@@ -926,7 +1021,12 @@ function onFile(f){
   fr.readAsArrayBuffer(f);
 }
 document.addEventListener("click",function(e){
-  var t=e.target.closest("[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  var t=e.target.closest("[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  if(t.dataset.hsel!=null){SEL[CURSEL.k]=+t.dataset.hsel;render();return}
+  if(t.dataset.hnav){SEL[CURSEL.k]=Math.max(0,Math.min(NH-1,CURSEL.h+(+t.dataset.hnav)));render();return}
+  if(t.dataset.hnow){delete SEL[CURSEL.k];render();return}
+  if(t.dataset.shsel!=null){var tg=+t.dataset.shsel;SEL[CURSEL.k]=(CURSEL.h<12?0:1)===tg?CURSEL.h:(tg*12);render();return}
+  if(t.dataset.gline){tab=t.dataset.gline;render();window.scrollTo(0,0);return}
   if(t.dataset.tab){tab=t.dataset.tab;render();if(tab==="Trends"&&!TR.once){TR.once=true;loadHistory()}return}
   if(t.dataset.run!=null){var d=curDate(),k=d+"|"+tab,m=(S.running[k]=S.running[k]||{}),i=t.dataset.run;
     if(m[i]!=null){delete m[i];syncPush("r",k+"|"+i,null)}else{m[i]=Date.now();syncPush("r",k+"|"+i,m[i])}save();render();return}
