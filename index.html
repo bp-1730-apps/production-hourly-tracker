@@ -503,10 +503,20 @@ async function getJson(name){
   if(!r.ok)throw new Error(name+" not found (HTTP "+r.status+"). It must sit in the same folder as this page.");
   return r.json();
 }
-async function pullAll(){
+var l2lSrc="",l2lLiveErr="";
+// live pull: a Supabase function asks L2L right now (read only). Falls back to the l2l.json file the GitHub job saves.
+async function liveL2L(force){
+  var r=await fetch(SYNC.url+"/functions/v1/l2l"+(force?"?force=1":""),{headers:sHead()});
+  var j=await r.json().catch(function(){return {}});
+  if(!r.ok||!j.lines)throw new Error(j.error||j.message||("HTTP "+r.status));
+  return j;
+}
+async function pullAll(force){
   if(pulling)return;pulling=true;statusLabel();
   try{
-    var j=await getJson("l2l.json");
+    var j=null;l2lSrc="file";l2lLiveErr="";
+    if(SYNC.on){try{j=await liveL2L(force===true);l2lSrc="live"}catch(e){l2lLiveErr=(e&&e.message)||String(e)}}
+    if(!j)j=await getJson("l2l.json");
     TRACKED.forEach(function(l){if(j.lines&&Array.isArray(j.lines[l]))S.l2l[l]=j.lines[l]});
     feedUpdated=j.updated||"";l2lErr=(j.errors||[]).join("; ");
     if(!feedUpdated&&!l2lErr)l2lErr="waiting for the first L2L pull (GitHub > Actions > Pull L2L data > Run workflow)";
@@ -788,6 +798,7 @@ async function syncInit(){
     S.syncMig=1;save();
   }
   if(!S.planMig){sharePlans();S.planMig=1;save()}              // schedules loaded here before sharing existed
+  setTimeout(function(){pullAll()},800);
   await syncPull();setInterval(syncPull,15000);
 }
 
@@ -836,6 +847,8 @@ function statusLabel(){
   p.className="stat "+cls;p.lastChild.textContent=txt;
   var d=curDate(),t=[],miss=Object.keys(MISSING[d]||{});
   if(l2lErr)t.push([1,"Problem: "+l2lErr]);
+  if(l2lSrc==="live")t.push([0,"L2L source: pulled live from L2L just now (Refresh L2L pulls again)."]);
+  else if(l2lSrc==="file")t.push([0,"L2L source: the l2l.json file from GitHub (updated by the 5-minute job, which can run late)."+(SYNC.on&&l2lLiveErr?" Live pull not available: "+l2lLiveErr:"")]);
   if(schedErr&&!allDates().length)t.push([1,"Schedule: "+schedErr]);
   if(l2lAt&&!l2lErr)t.push([0,"Actuals last changed "+hm(feedUpdated)+", checked "+chk+". Blue boxes came from L2L; type over one to correct it."]);
   if(miss.length)t.push([0,"Units per case needed for: "+miss.sort().join(", ")+" (Settings > Units per case)"]);
@@ -1188,7 +1201,7 @@ document.addEventListener("click",function(e){
   if(t.id==="bSet"||t.id==="l2lpill"){var pn=$("panel");pn.hidden=!pn.hidden;return}
   if(t.id==="dPrev"||t.id==="dNext"){var sel=$("date"),i=sel.selectedIndex+(t.id==="dPrev"?1:-1);if(i>=0&&i<sel.options.length){sel.selectedIndex=i;applyAll();render()}return}
   if(t.id==="bLoad")$("file").click();
-  else if(t.id==="bPull")pullAll();
+  else if(t.id==="bPull")pullAll(true);
   else if(t.id==="bShare"){if(!SYNC.on)alert("Shared entries are not set up, so schedules cannot be shared.");else{var n=sharePlans();alert("Sent "+n+" line-day(s) of schedule to your other devices. They update within about 15 seconds.")}}
   else if(t.id==="bUpc")upcDialog();
   else if(t.id==="bTr")loadHistory();
