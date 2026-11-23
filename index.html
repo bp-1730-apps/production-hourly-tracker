@@ -237,6 +237,21 @@ table.ov th{border-radius:8px}table.ov td{border-radius:8px;transition:transform
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}}
 @media(max-width:700px){.qs input,.qs input:focus{width:130px}#toast{bottom:14px}}
 @media print{body{background:#fff}.top,.tabs,#toast{display:none}}
+
+/* ===== performance pass: blur only where it is cheap, no hover jitter on touch ===== */
+.card,.kp,.fs,details.hu,.tools,.kpi,.note-card,.entry,table.hr,.seg,.tlt,.tab,.chip,.tlc{-webkit-backdrop-filter:none;backdrop-filter:none}
+.card,.kp,.fs,details.hu,.tools,.kpi,.note-card,.entry,table.hr,.tlt{background:rgba(255,255,255,.7)}
+.tab{background:rgba(255,255,255,.55)}.chip{background:rgba(255,255,255,.75)}.seg{background:rgba(255,255,255,.5)}
+.kpi.st{background-clip:padding-box}
+.main.swap>*{animation-duration:.28s}.main.swap>*:nth-child(n+4){animation-delay:.06s}
+@media(hover:none){.kp:hover,.kpi:hover,.tlc:hover,.tab:hover,.cd:hover{transform:none;box-shadow:var(--sh)}.btn:hover{box-shadow:none}}
+body{overflow-anchor:none}
+.main{contain:layout style}
+table.hr,.fs{contain:paint}
+html{scroll-behavior:auto;overscroll-behavior-y:none}
+button,.tab,.chip,.tlc,.seg button{touch-action:manipulation;-webkit-user-select:none;user-select:none}
+input,select{font-size:16px}
+.top{will-change:transform}
 </style>
 </head>
 <body>
@@ -898,6 +913,7 @@ function tabDot(l,date,t){
   if(!date||!runsSorted(l,date).length)return "";
   var c=lineStatus(l,date,t).cls;return c==="none"?"":c;
 }
+var LAST={t:"",m:""};function sigNow(){return tab+"|"+curDate()+"|"+FS.sec+"|"+TR.sec+"|"+MC.line}
 function render(){
   rT=null;
   var ae=document.activeElement,fk=null,fpos=0;
@@ -906,7 +922,7 @@ function render(){
   th+='<button class="tab'+("Board"===tab?" on":"")+'" data-tab="Board">Board</button>';
   TRACKED.forEach(function(l){th+='<button class="tab'+(l===tab?" on":"")+'" data-tab="'+l+'"><i class="'+tabDot(l,date,t)+'"></i>'+l+'</button>'});
   [["Trends"," sep"],["Full schedule",""],["Manual counts",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
-  $("tabs").innerHTML=th;
+  if(th!==LAST.t){$("tabs").innerHTML=th;LAST.t=th}
   var h="";
   if(tab==="Trends")h=buildTrends();
   else if(tab==="Manual counts")h=buildManual(date);
@@ -914,8 +930,8 @@ function render(){
   else if(tab==="Board")h=buildBoard(date);
   else if(tab==="Full schedule")h=buildFull(date);
   else h=buildLine(tab,date);
-  $("main").innerHTML=h;
-  statusLabel();polish();
+  var same=h===LAST.m;if(!same){var sy=window.scrollY,fresh0=sigNow()!==lastSig;$("main").innerHTML=h;LAST.m=h;if(!fresh0&&Math.abs(window.scrollY-sy)>1)window.scrollTo(0,sy)}
+  statusLabel();if(!same)polish();
   if(fk){var e=document.querySelector('[data-k="'+fk+'"]');if(e){e.focus();try{e.setSelectionRange(fpos,fpos)}catch(x){}}}
 }
 function later(ms){clearTimeout(rT);rT=setTimeout(render,ms||900)}
@@ -972,7 +988,7 @@ function barsHtml(line,date,runs,w0,span,now,live,click){
     var made=madeOf(date,line,ri),pct=r.need>0?Math.min(1,made/r.need):0,c=prodColor(r.item);
     h+='<div class="tlb"'+(click?' data-gline="'+line+'"':'')+' style="left:'+((s-w0)/span*100)+'%;width:'+((e-s)/span*100)+'%;top:'+(L.lane[ri]*34+4)+'px;background:'+c[0]+';border-color:'+c[1]+'" title="'+esc(r.item+" "+r.name+" | "+clock(r.s)+" - "+clock(pend(r))+" | "+fmt(rnd(made))+" of "+fmt(rnd(r.need))+" cases")+'"><i style="width:'+(pct*100)+'%;background:'+c[1]+'"></i><span>'+esc(r.item.slice(-4))+' '+esc(r.name)+'</span></div>';
   });
-  if(live&&now>=w0&&now<=w0+span)h+='<div class="tlnow" style="left:'+((now-w0)/span*100)+'%"></div>';
+  if(live&&now>=w0&&now<=w0+span)h+='<div class="tlnow" style="left:'+((now-w0)/span*100).toFixed(1)+'%"></div>';
   return h+'</div>';
 }
 function hourHead(w0,n){var h='<div class="tlh" style="grid-template-columns:repeat('+n+',1fr)">';for(var i=0;i<n;i++)h+='<div>'+hr(w0+60*i)+'</div>';return h+'</div>'}
@@ -1460,19 +1476,18 @@ document.addEventListener("keydown",function(e){if(e.key==="Escape")closeModal()
 /* ===== polish: motion, undo, search, shortcuts, swipe, install/offline ===== */
 var RM=window.matchMedia&&matchMedia("(prefers-reduced-motion:reduce)").matches,PREV={},lastSig="",toastT=null,undoFn=null;
 function polish(){
-  var m=$("main"),sig=tab+"|"+curDate()+"|"+FS.sec+"|"+TR.sec+"|"+MC.line,fresh=sig!==lastSig;lastSig=sig;
+  var m=$("main"),sig=sigNow(),fresh=sig!==lastSig;lastSig=sig;
   if(RM)return;
+  if(!fresh){PREV={};return}
   if(fresh){m.classList.remove("swap");void m.offsetWidth;m.classList.add("swap")}
-  var seen={};
   m.querySelectorAll(".kp b,.kpi .big").forEach(function(el,i){
     var tx=el.textContent.trim(),mm=/^(-?)([\d,]*\.?\d+)(.*)$/.exec(tx);if(!mm)return;
-    var to=parseFloat(mm[2].replace(/,/g,"")),dec=(mm[2].split(".")[1]||"").length,key=sig+"#"+i;seen[key]=to;
-    var from=fresh?0:(key in PREV?PREV[key]:to);if(mm[1])to=-to;if(from===to||el.children.length)return;
+    var to=parseFloat(mm[2].replace(/,/g,"")),dec=(mm[2].split(".")[1]||"").length;
+    var from=0;if(mm[1])to=-to;if(from===to||el.children.length)return;
     var t0=performance.now(),D=600,sg=mm[1],suf=mm[3];
     (function step(t){var p=Math.min(1,(t-t0)/D),e=1-Math.pow(1-p,3),v=Math.abs(from)+(Math.abs(to)-Math.abs(from))*e;
       el.textContent=sg+v.toLocaleString("en-US",{minimumFractionDigits:dec,maximumFractionDigits:dec})+suf;if(p<1)requestAnimationFrame(step);else el.textContent=tx})(t0);
   });
-  PREV=seen;
   m.querySelectorAll(".bar2 i,.cbar i").forEach(function(el){
     var w=el.style.width;if(!w)return;el.style.width="0";void el.offsetWidth;requestAnimationFrame(function(){el.style.width=w})});
 }
@@ -1519,8 +1534,7 @@ function qShow(){
 }
 function qGo(l,s){
   $("qres").hidden=true;$("q").value="";$("q").blur();tab=l;
-  var h=Math.max(0,Math.min(NH-1,Math.floor((+s-DAY0)/60)));render();
-  var ks=Object.keys(SEL).length;try{if(CURSEL&&CURSEL.k){SEL[CURSEL.k]=h;render()}}catch(x){}
+  var h=Math.max(0,Math.min(NH-1,Math.floor((+s-DAY0)/60)));render();try{if(CURSEL&&CURSEL.k){SEL[CURSEL.k]=h;render()}}catch(x){}
   var el=document.querySelector(".entry")||$("main").firstChild;if(el&&el.classList){el.classList.add("flash");el.scrollIntoView({behavior:RM?"auto":"smooth",block:"center"})}
 }
 document.addEventListener("input",function(e){if(e.target.id==="q")qShow()});
