@@ -147,8 +147,17 @@ def _colof(d, label):
     return -1
 
 
-def parse_schedule(rows):
-    """Finds columns by their header text. Returns {'LINE|date': [run, ...]}"""
+def add(lst, run):
+    """Adds a run unless an identical one is already there (workbooks often repeat a block)."""
+    same = [r for r in lst if r["item"] == run["item"] and r["s"] == run["s"] and r["e"] == run["e"] and abs(r["need"] - run["need"]) < 0.5]
+    if not same:
+        lst.append(run)
+
+
+def parse_schedule(rows, week=None):
+    """Finds columns by their header text. Returns {'LINE|date': [run, ...]}.
+    Newer workbooks have planned start/end times; older ones do not (those runs get s=e=None = daily totals only).
+    week = list of (first, last) ISO dates from the file name: a block dated outside that week is a stale copy and is skipped."""
     keys = sorted(rows)
     cols = dict(item=-1, prod=-1, start=-1, need=-1, std=-1, hrs=-1)
     for r in keys:
@@ -162,10 +171,10 @@ def parse_schedule(rows):
         if th >= 0: cols["hrs"] = th
         if e > 0 and isinstance(d.get(e - 1), str) and d[e - 1].strip().upper() == "TIME START":
             cols["start"] = e - 1
-    if cols["prod"] < 0 or cols["start"] < 0 or cols["need"] < 0:
-        raise ValueError("Could not find the PRODUCT / CASES NEEDED / TIME START / TIME END headers.")
+    if cols["prod"] < 0 or cols["need"] < 0:
+        raise ValueError("Could not find the PRODUCT / CASES NEEDED headers.")
     heads = [r for r in keys if _colof(rows[r], "LINE:") >= 0]
-    out = {}
+    out, skipped = {}, 0
     for bi, r in enumerate(heads):
         end = heads[bi + 1] - 1 if bi + 1 < len(heads) else keys[-1]
         lc, dc = _colof(rows[r], "LINE:"), _colof(rows[r], "DATE/DAY:")
@@ -173,7 +182,11 @@ def parse_schedule(rows):
         dv = rows[r].get(dc + 1) if dc >= 0 else None
         if not isinstance(dv, float) or line not in ALL:
             continue
-        key = line + "|" + serial_to_iso(dv)
+        day = serial_to_iso(dv)
+        if week and not any(a <= day <= b for a, b in week):
+            skipped += 1
+            continue
+        key = line + "|" + day
         out.setdefault(key, [])
         for rr in range(r + 1, end + 1):
             d = rows.get(rr)
@@ -182,38 +195,92 @@ def parse_schedule(rows):
             p = d.get(cols["prod"])
             if not isinstance(p, str) or not p.strip():
                 continue
-            s, e = d.get(cols["start"]), d.get(cols["start"] + 1)
-            if not isinstance(s, float) or not isinstance(e, float) or e <= s or s >= 2:
-                continue
             std = d.get(cols["std"]) if cols["std"] >= 0 and isinstance(d.get(cols["std"]), float) else 0
             hrs = d.get(cols["hrs"]) if cols["hrs"] >= 0 and isinstance(d.get(cols["hrs"]), float) else 0
             need = std * hrs if std * hrs > 0 else (d.get(cols["need"]) if isinstance(d.get(cols["need"]), float) else 0)
             it = d.get(cols["item"]) if cols["item"] >= 0 else ""
             it = str(int(it)) if isinstance(it, float) else str(it or "")
-            out[key].append(dict(item=it, name=p.strip(), s=s * 1440, e=e * 1440, need=need, std=std, hrs=hrs))
+            if cols["start"] >= 0:
+                s, e = d.get(cols["start"]), d.get(cols["start"] + 1)
+                if isinstance(s, float) and isinstance(e, float) and e > s and s < 2:
+                    add(out[key], dict(item=it, name=p.strip(), s=s * 1440, e=e * 1440, need=need, std=std, hrs=hrs))
+                    continue
+                if cols["start"] >= 0 and (isinstance(s, float) or isinstance(e, float)):
+                    continue
+            if need > 0:                                   # no times in this layout: keep the daily total
+                add(out[key], dict(item=it, name=p.strip(), s=None, e=None, need=need, std=std, hrs=hrs))
+    out["_skipped"] = skipped
     return out
 
 
+def week_of(path):
+    """('2026-02-02', '2026-02-06') from a name like 'SCHEDULE FOR WEEK 02.02.26-02.06.26'. Year typos are tolerated: month/day decide."""
+    m = re.search(r"(\d\d)\.(\d\d)\.(\d\d)\s*-\s*(\d\d)\.(\d\d)\.(\d\d)", os.path.basename(path))
+    if not m:
+        return None
+    m1, d1, y1, m2, d2, y2 = [int(x) for x in m.groups()]
+    y2 += 2000
+    y1 = y2 - 1 if (m1, d1) > (m2, d2) else y2
+    out = []
+    for k in (0, 1):                               # also try one year later, because some names have the year typed wrong
+        try:
+            a = datetime.date(y1 + k, m1, d1) - datetime.timedelta(days=1)
+            b = datetime.date(y2 + k, m2, d2) + datetime.timedelta(days=1)
+        except ValueError:
+            continue
+        out.append((a.isoformat(), b.isoformat()))
+    return out or None
+
+
+def rounded(runs):
+    return [dict(item=r["item"], name=r["name"], s=None if r["s"] is None else round(r["s"], 3), e=None if r["e"] is None else round(r["e"], 3), need=round(r["need"], 2),
+                 std=round(r["std"], 2), hrs=round(r["hrs"], 4)) for r in runs]
+
+
+def pick_files():
+    files = sorted(set(glob.glob("*.xls*") + glob.glob("**/*.xls*", recursive=True)))
+    def order(p):                                  # copies first, so the original of the same week wins
+        b = os.path.basename(p)
+        return (0 if b.lower().startswith("copy of") else 1, p)
+    return sorted(files, key=order)
+
+
 def main():
-    files = sorted(glob.glob("*.xlsb") + glob.glob("*.xlsx") + glob.glob("*.xlsm"), key=os.path.getmtime)
+    files = pick_files()
     if not files:
-        sys.exit("No .xlsb/.xlsx workbook found in the repository root")
-    path = files[-1]
-    parsed = parse_schedule(read_sheet(path))
-    plans = {}
-    for key, runs in parsed.items():
-        line, date = key.split("|")
-        plans.setdefault(date, {})[line] = runs
-    stamp = "%s %d" % (path, os.path.getmtime(path))
-    old = {}
-    try:
-        old = json.load(open("schedule.json", encoding="utf-8"))
-    except Exception:
-        pass
-    if old.get("plans") == plans:
+        sys.exit("No .xlsb/.xlsx workbook found in the repository")
+    plans = {}                                     # everything saved so far: date -> line -> runs
+    for f in glob.glob("data/plans-*.json"):
+        for d, lines in json.load(open(f, encoding="utf-8")).get("plans", {}).items():
+            plans.setdefault(d, {}).update(lines)
+    before = json.dumps(plans, sort_keys=True)
+    used = 0
+    for path in files:                             # a day in a newer workbook replaces the saved one; other days stay
+        try:
+            parsed = parse_schedule(read_sheet(path), week_of(path))
+        except Exception as ex:
+            print("skipped", path, "-", str(ex)[:80]); continue
+        skipped = parsed.pop("_skipped", 0)
+        n = 0
+        for key, runs in parsed.items():
+            line, date = key.split("|")
+            if runs:
+                plans.setdefault(date, {})[line] = rounded(runs); n += 1
+        used += 1
+        print("read", os.path.basename(path), "-", n, "line-days" + (", %d stale block(s) ignored" % skipped if skipped else ""))
+    if json.dumps(plans, sort_keys=True) == before and os.path.exists("schedule.json"):
         print("no change"); return
-    json.dump({"updated": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M:%S"), "source": path, "plans": plans}, open("schedule.json", "w"), separators=(",", ":"))
-    print("saved", len(plans), "days from", path)
+    os.makedirs("data", exist_ok=True)
+    months = {}
+    for d, lines in plans.items():
+        months.setdefault(d[:7], {})[d] = lines
+    for m, p in months.items():                    # one file per month, used by the Trends tab
+        json.dump({"plans": p}, open("data/plans-%s.json" % m, "w"), separators=(",", ":"))
+    today = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(hours=8)
+    cut = (today - datetime.timedelta(days=21)).strftime("%Y-%m-%d")
+    recent = {d: l for d, l in plans.items() if d >= cut}      # the live page only needs the last 3 weeks and the future
+    json.dump({"updated": today.strftime("%Y-%m-%d %H:%M:%S"), "plans": recent}, open("schedule.json", "w"), separators=(",", ":"))
+    print("saved", len(plans), "days (", len(recent), "recent ) from", used, "workbook(s)")
 
 
 main()
