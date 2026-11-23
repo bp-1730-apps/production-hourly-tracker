@@ -169,6 +169,8 @@ table.hl td.pc{font-size:13px}table.hl tr.carry td.pc{color:#6b7787}table.hl tr.
 .cbar{height:12px;background:#e8edf3;border-radius:999px;overflow:hidden}.cbar i{display:block;height:100%;border-radius:999px}
 .mcin{width:120px;font:inherit;font-size:15px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;text-align:right}.mcin:focus{outline:2px solid var(--gold)}tr.ov-on td{background:#fff8e1}
 table.shl td{vertical-align:top;text-align:left;padding:6px 8px;min-width:130px}table.shl td b{display:block;font-size:14px}table.shl td .sub{display:block;font-size:11px;line-height:1.3}
+.stat.l2l{background:transparent;color:#a9b6c7;font-size:12px;padding:6px 8px;border:1px solid rgba(255,255,255,.18)}.stat.l2l i{background:#8a97a8!important}
+.l2lref{color:#8a96a6;font-size:12px;font-style:italic}.lk{border:0;background:none;color:#2f6fb0;font:inherit;font-size:12px;text-decoration:underline;cursor:pointer;padding:0 2px}
 </style>
 </head>
 <body>
@@ -181,7 +183,7 @@ table.shl td{vertical-align:top;text-align:left;padding:6px 8px;min-width:130px}
 <div id="panel" hidden>
  <div class="row">
   <button class="btn pri" id="bLoad">Load schedule file...</button> <button class="btn" id="bShare">Send schedules to all devices</button><input type="file" id="file" accept=".xlsb,.xlsx,.xlsm" style="display:none">
-  <button class="btn" id="bPull">Refresh L2L</button><button class="btn" id="bUpc">Units per case</button>
+  <button class="btn" id="bPull">Refresh L2L</button><label>ALSO USE L2L</label><input type="checkbox" id="useL2L"><span class="sub">fills hours nobody typed (off = typed counts only)</span><button class="btn" id="bUpc">Units per case</button>
   <label>VIEW</label><select id="view"><option value="auto">Auto</option><option value="1">1st shift</option><option value="2">2nd shift</option><option value="both">Both shifts</option></select>
   <label>YES AT</label><input type="number" id="thr" value="95" min="0" max="100"><span class="sub">% of expected</span>
   <label>CAPACITY</label><input type="number" id="cap" value="20" min="1" max="24"><span class="sub">hours per day, 5 days a week (Mon-Fri)</span>
@@ -221,7 +223,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 var TRACKED=["MP4","PXM6","2A","PL1","PL2","2E"], ALL=["2A","PXM6","PL1","MP4","PL2","2E"], NH=24, DAY0=360;
 var DEF_UPC={"005307":12,"005415":6,"008184":6,"005305":12,"005306":12,"005375":6,"005381":6,"005382":6,"005383":6,"005416":6,"005417":6,"005418":6,"005419":6,"008185":6,"008246":6,"008500":6,"008545":12,"005338":6,"005339":6,"005349":6,"005361":6,"005376":6,"005403":6,"005405":6,"005406":6,"005408":6,"005409":6,"008182":8,"008183":8,"008226":6,"008227":6,"008232":6,"008252":6,"008253":6,"008225":6,"005407":6,"005362":6,"005173":6,"008175":6,"008177":6,"008179":6,"008186":6,"008234":6,"005439":12,"005401":6,"008176":6};
 var STORE="hourly_tracker_html_v2", OLDSTORE="hourly_tracker_html_v1";
-var S={syncLast:"",syncMig:0,capH:20,plans:{},shift:{},acts:{},mrun:{},dones:{},notes:{},running:{},upc:{},l2l:{},stamp:""};
+var S={syncLast:"",syncMig:0,capH:20,plans:{},shift:{},useL2L:0,acts:{},mrun:{},dones:{},notes:{},running:{},upc:{},l2l:{},stamp:""};
 var REMOTE={}, RECENT={}, ARCH={}, IDX={}, HLOAD={}, TR={from:"",to:"",group:"week",metric:"sched",busy:false,msg:"",once:false};
 var showAllChips=false,SEL={},ARCHM={},TRMISS={};
 var AUTO={}, STATS={}, MISSING={}, tab="Board", view="auto", l2lAt=null, l2lErr="", feedUpdated="", schedErr="", pulling=false, rT=null;
@@ -320,7 +322,7 @@ function allRunsOf(line,date){return (((S.plans[date]||{})[line])||((REMOTE[date
 // runs with planned start/end times (older schedules have none: daily totals only)
 function runsSorted(line,date){var r=allRunsOf(line,date).filter(function(x){return x.s!=null});r.sort(function(a,b){return a.s-b.s});return r}
 function akey(d,l,h,r){return d+"|"+l+"|"+h+"|"+r}
-function effAct(d,l,h,r){var k=akey(d,l,h,r);if(k in S.acts)return S.acts[k];if(S.mrun&&(d+"|"+l+"|"+r) in S.mrun)return null;return k in AUTO?AUTO[k]:null}   // a manual run total replaces L2L for that product
+function effAct(d,l,h,r){var k=akey(d,l,h,r);if(k in S.acts)return S.acts[k];if(S.mrun&&(d+"|"+l+"|"+r) in S.mrun)return null;return (S.useL2L&&k in AUTO)?AUTO[k]:null}   // a manual run total replaces L2L for that product
 function madeOf(d,l,ri){var t=0;for(var h=0;h<NH;h++){var v=effAct(d,l,h,ri);if(v!=null)t+=v}return t}
 function doneOf(d,l,ri){var v=S.dones[d+"|"+l+"|"+ri];return v==null?null:v}
 function thr(){var v=parseFloat($("thr").value);return isNaN(v)?.95:Math.max(0,Math.min(1,v/100))}
@@ -769,6 +771,7 @@ async function syncFlush(){
 function applyRemote(x){
   if(SYNC.pend[x.k]!==undefined)return false;                 // our own newer edit is still waiting to be sent
   var p=x.k.split("|"),kind=p[0],key=p.slice(1).join("|"),val=x.deleted?null:x.v,store,cur;
+  if(kind==="s"){var nv=val?1:0;if((S.useL2L?1:0)===nv)return false;S.useL2L=nv;var cb=$("useL2L");if(cb)cb.checked=!!nv;return true}
   if(kind==="m")store=S.mrun;else if(kind==="a")store=S.acts;else if(kind==="n")store=S.notes;else if(kind==="d")store=S.dones;else if(kind==="u")store=S.upc;
   else if(kind==="p"){                                       // a schedule loaded in the app on any device
     var pp=key.split("|"),pd=pp[0],pl=pp[1];
@@ -868,13 +871,14 @@ function statusLabel(){
   else if(l2lErr){cls="warn";txt="L2L "+hm(feedUpdated)+" (problem)"}
   else if(l2lAt){cls="ok";txt="L2L "+hm(feedUpdated)}
   else txt="L2L: no data yet";
-  p.className="stat "+cls;p.lastChild.textContent=txt;
+  p.className="stat l2l";p.lastChild.textContent=txt.replace(/^L2L/,"L2L ref");
   var d=curDate(),t=[],miss=Object.keys(MISSING[d]||{});
   if(l2lErr)t.push([1,"Problem: "+l2lErr]);
   if(l2lSrc==="live")t.push([0,"L2L source: pulled live from L2L just now (Refresh L2L pulls again)."]);
   else if(l2lSrc==="file")t.push([0,"L2L source: the l2l.json file from GitHub (updated by the 5-minute job, which can run late)."+(SYNC.on&&l2lLiveErr?" Live pull not available: "+l2lLiveErr:"")]);
   if(schedErr&&!allDates().length)t.push([1,"Schedule: "+schedErr]);
-  if(l2lAt&&!l2lErr)t.push([0,"Actuals last changed "+hm(feedUpdated)+", checked "+chk+". Blue boxes came from L2L; type over one to correct it."]);
+  t.push([0,S.useL2L?"Counts: typed numbers first, then L2L for hours nobody typed.":"Counts: only the numbers typed in the app are used. L2L is shown as a grey reference (turn on \"Also use L2L\" in this panel to fill empty hours with it)."]);
+  if(l2lAt&&!l2lErr)t.push([0,"L2L (reference) last changed "+hm(feedUpdated)+", checked "+chk+"."]);
   if(miss.length)t.push([0,"Units per case needed for: "+miss.sort().join(", ")+" (Settings > Units per case)"]);
   TRACKED.forEach(function(line){var st=STATS[d+"|"+line];if(st&&st.records){
     var x=line+": "+st.records+" L2L records, "+st.used+" used";
@@ -979,7 +983,7 @@ function buildLine(line,date){
   H.prods.forEach(function(q){
     var k=akey(date,line,selH,q.ri),manual=k in S.acts,auto=q.act!=null&&!manual,c=prodColor(q.item);
     h+='<div class="er2"><div class="ep"><span class="sw" style="background:'+c[1]+'"></span><b>'+esc(q.item)+'</b> <span class="sub">'+esc(q.name.slice(0,48))+'</span></div>';
-    h+='<div class="ee">Expected <b>'+fmt(rnd(q.exp))+'</b>'+(q.back>=0.5?' <span class="owes">owes '+fmt(rnd(q.back))+'</span>':'')+'</div>';
+    h+='<div class="ee">Expected <b>'+fmt(rnd(q.exp))+'</b>'+(q.back>=0.5?' <span class="owes">owes '+fmt(rnd(q.back))+'</span>':'')+(k in AUTO&&(!manual||Math.round(AUTO[k])!==Math.round(S.acts[k]))?'<div class="l2lref">L2L reports '+fmt(rnd(AUTO[k]))+(manual?'':' <button class="lk" data-usel2l="'+k+'">use this</button>')+'</div>':'')+'</div>';
     h+='<input class="act big'+(auto?" auto":"")+'" inputmode="decimal" placeholder="actual" data-k="'+k+'" data-act="'+k+'" value="'+(q.act==null?"":rnd(q.act))+'">';
     h+='<label class="dn"><input type="checkbox" data-done="'+line+'|'+q.ri+'|'+selH+'"'+(q.done?" checked":"")+'> order finished'+(q.done&&(q.short||0)>=0.5?' <span class="short">short '+fmt(rnd(q.short))+'</span>':'')+'</label></div>';
   });
@@ -1003,7 +1007,7 @@ function buildLine(line,date){
           '<td class="ex">'+(planned?'<b>'+fmt(rnd(q.sch))+'</b>':'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
           '<td class="ex">'+(q.back>=0.5?fmt(rnd(q.back)):'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
           '<td class="ex">'+fmt(rnd(q.exp))+'</td>'+
-          '<td class="ex">'+(q.act!=null?'<b>'+fmt(rnd(q.act))+'</b>':'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
+          '<td class="ex">'+(q.act!=null?'<b>'+fmt(rnd(q.act))+'</b>':(akey(date,line,hI,q.ri) in AUTO?'<span class="l2lref" title="L2L reference, not counted">L2L '+fmt(rnd(AUTO[akey(date,line,hI,q.ri)]))+'</span>':'<span style="color:#b4bdca">&ndash;</span>'))+'</td>'+
           '<td class="ex">'+(dv==null?'<span style="color:#b4bdca">&ndash;</span>':'<span style="color:'+(dv>=0?'var(--okfg)':'var(--badfg)')+'">'+(dv>=0?'+':'')+fmt(dv)+'</span>')+'</td>'+
           (qi===0?tail:'')+'</tr>';
       });
@@ -1011,7 +1015,7 @@ function buildLine(line,date){
     h+='<div class="card tw" style="margin-bottom:12px"><table class="hr hl" style="margin:0"><thead><tr><th colspan="10" style="background:var(--ink);color:#fff">'+(s2===0?"1ST":"2ND")+' SHIFT &nbsp; '+clock(DAY0+60*b0)+' - '+clock(DAY0+60*(b0+12))+'</th></tr><tr><th>HOUR</th><th>PRODUCT</th><th style="text-align:right">PLANNED</th><th style="text-align:right">OWED</th><th style="text-align:right">EXPECTED</th><th style="text-align:right">MADE</th><th style="text-align:right">+/-</th><th class="c">HOUR TOTAL</th><th class="c">ON TARGET</th><th class="c">EFFICIENCY</th></tr></thead><tbody>'+rows+
       '<tr><td colspan="10" class="effsum '+(gt>0?effClass(ga/gt,t):"c-mut")+'">'+(s2===0?"1ST":"2ND")+' SHIFT EFFICIENCY &nbsp; '+(gt>0?rnd(100*ga/gt)+'% (made '+fmt(rnd(ga))+' of '+fmt(rnd(gt))+' scheduled-rate cases, hours with counts only)':'no counts yet')+'</td></tr></tbody></table></div>';
   });
-  h+='<div class="hint">Tap an hour above (or a row) to enter or fix its counts. Blue = from L2L, type over it to correct. Bars: filled part = cases made so far.</div>';
+  h+='<div class="hint">Tap an hour above (or a row) to enter or fix its counts. Your typed counts are the source of truth; L2L numbers show in grey as a reference (tap "use this" to copy one in). Bars: filled part = cases made so far.</div>';
   return h;
 }
 // every line on one 24-hour board: the schedule as bars, with progress and a now marker
@@ -1127,23 +1131,25 @@ function fsCell(o,metric,H,nL){
 function fsRanges(ds){var out=[],i=0;while(i<ds.length){var j=i;while(j+1<ds.length&&ds[j+1]===addDays(ds[j],dowI(ds[j])===4?3:1))j++;out.push(j>i?pretty(ds[i])+" to "+pretty(ds[j]):pretty(ds[i]));i=j+1}return out}
 function dowI(d){return (new Date(d+"T12:00:00").getDay()+6)%7}
 function fsCtl(){return '<div class="ctl"><label>PERIOD</label><select id="fsPer">'+[["today","Today"],["wk","This week"],["4w","Last 4 weeks"],["all","Whole year"]].map(function(o){return '<option value="'+o[0]+'"'+(FS.per===o[0]?" selected":"")+'>'+o[1]+'</option>'}).join("")+'</select><label>LINE</label><select id="fsLine"><option value="ALL">All lines</option>'+TRACKED.map(function(l){return '<option'+(FS.line===l?" selected":"")+'>'+l+'</option>'}).join("")+'</select></div>'}
+function fmtMin(m){m=Math.round(Math.abs(m));if(m<1)return "0 min";if(m<60)return m+" min";var hh=Math.floor(m/60),mm=m%60;return hh+" h"+(mm?" "+mm+" min":"")}
+function runMin(r,cases){return r.need>0?cases*runHrs(r)/r.need*60:0}      // minutes of line time that many cases represent
 function fsToday(){
-  var d=opDay(),now=nowRel(d),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),P={},any=false;
+  var d=opDay(),now=nowRel(d),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),P={},LM={},any=false;
   TRACKED.forEach(function(l){
     if((FS.line!=="ALL"&&l!==FS.line)||!runsSorted(l,d).length)return;
     any=true;var res=engine(l,d),last=res.hours[NH-1];
-    res.runs.forEach(function(r,ri){var k=k6(r.item)||r.item,p=P[k]=P[k]||{name:r.name,day:0,made:0,now:0,lines:{}};
-      p.day+=r.need;p.made+=last.A[ri];p.now+=idx>=0?res.hours[idx].S[ri]:0;p.lines[l]=1})});
+    res.runs.forEach(function(r,ri){var k=k6(r.item)||r.item,p=P[k]=P[k]||{name:r.name,day:0,made:0,now:0,min:0,lines:{}},due=idx>=0?res.hours[idx].S[ri]:0,mn=runMin(r,due-last.A[ri]);
+      p.day+=r.need;p.made+=last.A[ri];p.now+=due;p.min+=mn;LM[l]=(LM[l]||0)+mn;p.lines[l]=1})});
   var h='';
   if(!any)return {any:false,h:'<div class="card note-card">Nothing is scheduled with times for today ('+pretty(d)+'), so there is no live compliance. Use This week or Last 4 weeks for finished days.</div>'};
   var ks=Object.keys(P),T={day:0,made:0,now:0};ks.forEach(function(k){T.day+=P[k].day;T.made+=P[k].made;T.now+=P[k].now});
   ks.sort(function(a,b){return (P[b].now-P[b].made)-(P[a].now-P[a].made)});
   var col=function(p){return p>=95?"#4caf78":p>=85?"#e8b93c":"#d9665a"};
   var pace=T.now>0?100*T.made/T.now:null;
-  h+='<div class="card" style="padding:12px 16px;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:26px">'+(pace==null?'&ndash;':pace.toFixed(0)+'%')+'</b><span>of what should be made by now ('+fmt(rnd(T.made))+' of '+fmt(rnd(T.now))+' cases)</span></div>'+(pace!=null?'<div class="cbar" style="margin-top:8px"><i style="width:'+Math.min(100,pace)+'%;background:'+col(pace)+'"></i></div>':'')+'<div class="sub" style="margin-top:6px">Whole day: '+fmt(rnd(T.made))+' of '+fmt(rnd(T.day))+' scheduled ('+(T.day>0?(100*T.made/T.day).toFixed(0):0)+'%). "By now" counts completed hours only, as of '+clock(now)+'.</div></div>';
+  h+='<div class="card" style="padding:12px 16px;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:26px">'+(pace==null?'&ndash;':pace.toFixed(0)+'%')+'</b><span>of what should be made by now ('+fmt(rnd(T.made))+' of '+fmt(rnd(T.now))+' cases)</span></div>'+(pace!=null?'<div class="cbar" style="margin-top:8px"><i style="width:'+Math.min(100,pace)+'%;background:'+col(pace)+'"></i></div>':'')+'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+Object.keys(LM).map(function(l){var m=LM[l];return '<span class="tg" style="font-size:13px;padding:4px 12px;'+(m>0.5?'background:#fadcd8;color:#8a2a20':'background:#e2f4e6;color:#1b5e32')+'"><b>'+l+'</b> '+(Math.abs(m)<0.5?'on pace':fmtMin(m)+(m>0?' behind':' ahead'))+'</span>'}).join("")+'</div><div class="sub" style="margin-top:6px">Time behind = the cases behind divided by that product\'s run rate. Whole day: '+fmt(rnd(T.made))+' of '+fmt(rnd(T.day))+' scheduled ('+(T.day>0?(100*T.made/T.day).toFixed(0):0)+'%). "By now" counts completed hours only, as of '+clock(now)+'.</div></div>';
   var rows=ks.map(function(k){var p=P[k],pc=p.now>0?100*p.made/p.now:null,sh=p.now-p.made;
-    return '<tr><td><b>'+esc(p.name.slice(0,48))+'</b><div class="sub">'+esc(k)+' &middot; '+Object.keys(p.lines).join(", ")+'</div></td><td style="min-width:160px">'+(pc==null?'<span class="sub">not started</span>':'<div class="cbar"><i style="width:'+Math.min(100,pc)+'%;background:'+col(pc)+'"></i></div>')+'</td><td class="r"><b>'+(pc==null?'&ndash;':pc.toFixed(0)+'%')+'</b></td><td class="r">'+fmt(rnd(p.made))+' of '+fmt(rnd(p.now))+'</td><td class="r">'+fmt(rnd(p.day))+'</td><td class="r" style="color:'+(sh>0.5?'var(--badfg)':'var(--okfg)')+'">'+(p.now<=0?'':(sh>0.5?'-'+fmt(rnd(sh)):'+'+fmt(rnd(-sh))))+'</td></tr>'}).join("");
-  h+='<div class="sub" style="margin-bottom:6px">Biggest gaps first. Green 95%+, amber 85-95%, red under 85%. Counts come from L2L and anything typed on the Manual counts tab.</div><div class="card fs tw"><table><tr><th>PRODUCT</th><th></th><th class="r">ON PACE</th><th class="r">MADE OF DUE BY NOW</th><th class="r">DAY TOTAL</th><th class="r">BEHIND</th></tr>'+rows+'</table></div>';
+    return '<tr><td><b>'+esc(p.name.slice(0,48))+'</b><div class="sub">'+esc(k)+' &middot; '+Object.keys(p.lines).join(", ")+'</div></td><td style="min-width:160px">'+(pc==null?'<span class="sub">not started</span>':'<div class="cbar"><i style="width:'+Math.min(100,pc)+'%;background:'+col(pc)+'"></i></div>')+'</td><td class="r"><b>'+(pc==null?'&ndash;':pc.toFixed(0)+'%')+'</b></td><td class="r">'+fmt(rnd(p.made))+' of '+fmt(rnd(p.now))+'</td><td class="r">'+fmt(rnd(p.day))+'</td><td class="r" style="color:'+(sh>0.5?'var(--badfg)':'var(--okfg)')+'">'+(p.now<=0?'':(sh>0.5?'-'+fmt(rnd(sh)):'+'+fmt(rnd(-sh))))+'</td><td class="r" style="font-weight:700;color:'+(p.min>0.5?'var(--badfg)':'var(--okfg)')+'">'+(p.now<=0?'':(Math.abs(p.min)<0.5?'on pace':fmtMin(p.min)+(p.min>0?'':' ahead')))+'</td></tr>'}).join("");
+  h+='<div class="sub" style="margin-bottom:6px">Biggest gaps first. Green 95%+, amber 85-95%, red under 85%. Counts come from L2L and anything typed on the Manual counts tab.</div><div class="card fs tw"><table><tr><th>PRODUCT</th><th></th><th class="r">ON PACE</th><th class="r">MADE OF DUE BY NOW</th><th class="r">DAY TOTAL</th><th class="r">CASES BEHIND</th><th class="r">TIME BEHIND</th></tr>'+rows+'</table></div>';
   return {any:true,h:h};
 }
 function fsCompliance(st,today){
@@ -1207,17 +1213,17 @@ function buildManual(date){
     var hasM=mrKey(date,l,ri) in S.mrun,l2l=0,hasL=false;
     for(var hh=0;hh<NH;hh++){var k=akey(date,l,hh,ri);if(k in AUTO){l2l+=AUTO[k];hasL=true}}
     var made=last.A[ri],due=idx>=0?res.hours[idx].S[ri]:0,diff=made-due,dh=doneOf(date,l,ri),started=due>0.5||made>0.5;
-    T.need+=r.need;T.due+=due;T.made+=made;if(hasM)nman++;
-    var st=dh!=null?'<span class="res y">COMPLETED</span>':(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'on pace':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')));
+    T.need+=r.need;T.due+=due;T.made+=made;T.min=(T.min||0)+runMin(r,due-made);if(hasM)nman++;
+    var st=dh!=null?'<span class="res y">COMPLETED</span>':(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'on pace':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')+'<div class="sub">'+fmtMin(runMin(r,diff))+(diff>0?' ahead':' behind')+'</div>'));
     rows+='<tr'+(hasM?' class="ov-on"':'')+'><td class="pc" style="border-left:5px solid '+prodColor(r.item)[1]+'"><b>'+esc(String(r.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,44))+'<div class="sub">'+(r.s!=null?clock(r.s)+' - '+clock(r.e):'')+'</div></td>'+
-      '<td class="ex">'+fmt(rnd(r.need))+'</td><td class="ex">'+fmt(rnd(due))+'</td><td class="ex">'+(hasL?fmt(rnd(l2l)):'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
+      '<td class="ex">'+fmt(rnd(r.need))+'</td><td class="ex">'+fmt(rnd(due))+'</td><td class="ex">'+(hasL?'<span class="l2lref">'+fmt(rnd(l2l))+'</span>'+(hasM?'':' <button class="lk" data-usel2lrun="'+ri+'">use</button>'):'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
       '<td><input class="mcin" inputmode="decimal" placeholder="cases made" data-mcrun="'+ri+'" value="'+(hasM?rnd(S.mrun[mrKey(date,l,ri)]):'')+'"></td>'+
       '<td class="ex"><b>'+fmt(rnd(made))+'</b>'+(hasM?' <span class="tg">manual</span>':'')+'<div class="sub">'+Math.round(100*made/Math.max(1,r.need))+'% of run</div></td><td class="ex">'+st+'</td>'+
       '<td style="text-align:center"><input type="checkbox" data-mcdone="'+ri+'"'+(dh!=null?' checked':'')+'></td></tr>';
   });
   var td=T.made-T.due;
-  h+='<div class="card tw"><table class="hr hl" style="margin:0"><thead><tr><th>PRODUCT</th><th style="text-align:right">RUN CASES</th><th style="text-align:right">DUE BY NOW</th><th style="text-align:right">L2L</th><th>MANUAL TOTAL</th><th style="text-align:right">MADE</th><th style="text-align:right">AHEAD / BEHIND</th><th class="c">COMPLETED</th></tr></thead><tbody>'+rows+
-    '<tr><td class="effsum" colspan="8" style="text-align:left">'+l+' TOTAL &nbsp; made '+fmt(rnd(T.made))+' of '+fmt(rnd(T.due))+' due by now &middot; '+(Math.abs(td)<0.5?'on pace':(td>0?fmt(rnd(td))+' ahead':fmt(rnd(-td))+' behind'))+' &middot; '+fmt(rnd(T.need))+' scheduled for the day</td></tr></tbody></table></div>';
+  h+='<div class="card tw"><table class="hr hl" style="margin:0"><thead><tr><th>PRODUCT</th><th style="text-align:right">RUN CASES</th><th style="text-align:right">DUE BY NOW</th><th style="text-align:right">L2L (REFERENCE)</th><th>MANUAL TOTAL</th><th style="text-align:right">MADE</th><th style="text-align:right">AHEAD / BEHIND</th><th class="c">COMPLETED</th></tr></thead><tbody>'+rows+
+    '<tr><td class="effsum" colspan="8" style="text-align:left">'+l+' TOTAL &nbsp; made '+fmt(rnd(T.made))+' of '+fmt(rnd(T.due))+' due by now &middot; '+(Math.abs(td)<0.5?'on pace':(td>0?fmt(rnd(td))+' ahead':fmt(rnd(-td))+' behind')+' ('+fmtMin(T.min)+(T.min>0?' behind':' ahead')+')')+' &middot; '+fmt(rnd(T.need))+' scheduled for the day</td></tr></tbody></table></div>';
   h+='<div class="sub" style="margin:8px 0">"Due by now" counts only hours that have finished. A manual total is spread over the hours that product was scheduled, so the line tab and Board agree with it. Update the number as more is made. '+nman+' manual product(s) on '+l+' this day.</div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-mcclear="line">Clear manual counts for '+l+' this day</button><button class="btn" data-mcclear="day">Clear for all lines this day</button><button class="btn" data-mcclear="all">Clear ALL manual counts</button></div>';
   return h;
@@ -1332,7 +1338,9 @@ function onFile(f){
   fr.readAsArrayBuffer(f);
 }
 document.addEventListener("click",function(e){
-  var t=e.target.closest("[data-mcline],[data-mcclear],[data-fday],[data-fsec],[data-trsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  var t=e.target.closest("[data-usel2l],[data-usel2lrun],[data-mcline],[data-mcclear],[data-fday],[data-fsec],[data-trsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  if(t.dataset.usel2l){var uk=t.dataset.usel2l;if(uk in AUTO){S.acts[uk]=Math.round(AUTO[uk]);syncPush("a",uk,S.acts[uk]);save();applyAll();render()}return}
+  if(t.dataset.usel2lrun!=null){var ur=+t.dataset.usel2lrun,ud=curDate(),ut=0;for(var uh=0;uh<NH;uh++){var uk2=akey(ud,MC.line,uh,ur);if(uk2 in AUTO)ut+=AUTO[uk2]}mcSetRun(ud,MC.line,ur,String(Math.round(ut)));applyAll();render();return}
   if(t.dataset.mcline){MC.line=t.dataset.mcline;render();return}
   if(t.dataset.mcclear){var dd=curDate(),kind=t.dataset.mcclear;
     if(kind==="all"){if(!confirm("Clear EVERY manual count on every day? L2L numbers will be used again."))return;Object.keys(S.acts).forEach(function(k){delete S.acts[k];syncPush("a",k,null)});Object.keys(S.mrun).forEach(function(k){delete S.mrun[k];syncPush("m",k,null)});save();applyAll();render();return}
@@ -1379,6 +1387,7 @@ document.addEventListener("change",function(e){
       if(!confirm(msg)){t.checked=false;return}S.dones[key]=h;syncPush("d",key,h)}
     else{delete S.dones[key];syncPush("d",key,null)}
     save();render();return}
+  if(t.id==="useL2L"){S.useL2L=t.checked?1:0;syncPush("s","useL2L",S.useL2L);save();applyAll();render();return}
   if(t.dataset.mcrun!=null){mcSetRun(curDate(),MC.line,+t.dataset.mcrun,t.value);applyAll();render();return}
   if(t.dataset.mcdone!=null){var md=curDate(),mri=+t.dataset.mcdone,mkey=md+"|"+MC.line+"|"+mri;
     if(t.checked){var mres=engine(MC.line,md),mr=mres.runs[mri],mnow=nowRel(md),mh=mnow<NH*60+DAY0?Math.min(NH-1,Math.max(0,Math.floor((mnow-DAY0)/60))):Math.min(NH-1,Math.max(0,Math.floor((mr.e-DAY0)/60))),msh=Math.round(mr.need-mres.hours[NH-1].A[mri]);
@@ -1399,7 +1408,7 @@ document.addEventListener("change",function(e){
 document.addEventListener("mousedown",function(e){if(e.target.id==="mbg")closeModal()});
 document.addEventListener("keydown",function(e){if(e.key==="Escape")closeModal()});
 
-load();$("cap").value=S.capH||20;TR.to=opDay();TR.from=TR.to.slice(0,4)+"-01-01";fillDates();applyAll();render();
+load();$("cap").value=S.capH||20;$("useL2L").checked=!!S.useL2L;TR.to=opDay();TR.from=TR.to.slice(0,4)+"-01-01";fillDates();applyAll();render();
 setTimeout(syncInit,300);setTimeout(pullAll,400);setTimeout(function(){var y=opDay();var f=TR.from,t=TR.to;TR.from=y.slice(0,4)+"-01-01";TR.to=y;loadHistory(true).then(function(){TR.from=f;TR.to=t})},1500);setInterval(pullAll,120000);
 setInterval(function(){var a=document.activeElement;if(!(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"))&&!$("modal").innerHTML)render()},30000);
 window.__T={S:S,TR:TR,REMOTE:REMOTE,loadHistory:loadHistory,dailyData:dailyData,getAuto:function(){return AUTO},engine:engine,lineStatus:lineStatus,effHour:effHour,effTotal:effTotal,parseSchedule:parseSchedule,readRows:readRows,applyAll:applyAll,fillDates:fillDates,render:render,pullAll:pullAll,STATS:STATS,setView:function(v){view=v;render()},setTab:function(t){tab=t;render()}};
