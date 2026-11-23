@@ -182,7 +182,7 @@ def parse_schedule(rows, week=None):
             u = v.strip().upper()
             f = ("form" if u == "FORMULA#" else "po" if u.startswith("PROCESS ORDER") else "batches" if u.startswith("# OF BATCHES")
                  else "lbs" if u.startswith("TOTAL LBS") else "cmt" if u == "COMMENT" else "pack" if u == "PACK SIZE"
-                 else "info" if u == "ADDITIONAL INFO" else "shift" if u == "SHIFT" else None)
+                 else "info" if u == "ADDITIONAL INFO" else "shift" if u == "SHIFT" else "made" if u.startswith("CASES MFG") else None)
             if f and f not in extra:
                 extra[f] = c
     def extras(d):
@@ -288,7 +288,7 @@ def main():
     if not files:
         sys.exit("No .xlsb/.xlsx workbook found in the repository")
     plans = {}                                     # everything saved so far: date -> line -> runs
-    for f in glob.glob("data/plans-*.json"):
+    for f in sorted(glob.glob("plans-*.json")) + sorted(glob.glob("data/plans-*.json")):   # also reads files uploaded loose in the main folder
         for d, lines in json.load(open(f, encoding="utf-8")).get("plans", {}).items():
             plans.setdefault(d, {}).update(lines)
     before = json.dumps(plans, sort_keys=True)
