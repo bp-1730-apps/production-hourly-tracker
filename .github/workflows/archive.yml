@@ -10,7 +10,7 @@ on:
 permissions:
   contents: write
 concurrency:
-  group: tracker-data
+  group: tracker-archive
   cancel-in-progress: false
 jobs:
   archive:
