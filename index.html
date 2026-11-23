@@ -168,6 +168,7 @@ table.hl td.pc{font-size:13px}table.hl tr.carry td.pc{color:#6b7787}table.hl tr.
 .tg{display:inline-block;font-size:10px;font-weight:700;color:#7a6a2a;background:#fbf1cf;border-radius:999px;padding:1px 7px;margin-left:4px}
 .cbar{height:12px;background:#e8edf3;border-radius:999px;overflow:hidden}.cbar i{display:block;height:100%;border-radius:999px}
 .mcin{width:120px;font:inherit;font-size:15px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;text-align:right}.mcin:focus{outline:2px solid var(--gold)}tr.ov-on td{background:#fff8e1}
+table.shl td{vertical-align:top;text-align:left;padding:6px 8px;min-width:130px}table.shl td b{display:block;font-size:14px}table.shl td .sub{display:block;font-size:11px;line-height:1.3}
 </style>
 </head>
 <body>
@@ -220,7 +221,7 @@ var o=[];var l=Array.isArray(e);for(f=n.s.c;f<=n.e.c;++f)s[f]=ya(f);for(var c=n.
 var TRACKED=["MP4","PXM6","2A","PL1","PL2","2E"], ALL=["2A","PXM6","PL1","MP4","PL2","2E"], NH=24, DAY0=360;
 var DEF_UPC={"005307":12,"005415":6,"008184":6,"005305":12,"005306":12,"005375":6,"005381":6,"005382":6,"005383":6,"005416":6,"005417":6,"005418":6,"005419":6,"008185":6,"008246":6,"008500":6,"008545":12,"005338":6,"005339":6,"005349":6,"005361":6,"005376":6,"005403":6,"005405":6,"005406":6,"005408":6,"005409":6,"008182":8,"008183":8,"008226":6,"008227":6,"008232":6,"008252":6,"008253":6,"008225":6,"005407":6,"005362":6,"005173":6,"008175":6,"008177":6,"008179":6,"008186":6,"008234":6,"005439":12,"005401":6,"008176":6};
 var STORE="hourly_tracker_html_v2", OLDSTORE="hourly_tracker_html_v1";
-var S={syncLast:"",syncMig:0,capH:20,plans:{},shift:{},acts:{},dones:{},notes:{},running:{},upc:{},l2l:{},stamp:""};
+var S={syncLast:"",syncMig:0,capH:20,plans:{},shift:{},acts:{},mrun:{},dones:{},notes:{},running:{},upc:{},l2l:{},stamp:""};
 var REMOTE={}, RECENT={}, ARCH={}, IDX={}, HLOAD={}, TR={from:"",to:"",group:"week",metric:"sched",busy:false,msg:"",once:false};
 var showAllChips=false,SEL={},ARCHM={},TRMISS={};
 var AUTO={}, STATS={}, MISSING={}, tab="Board", view="auto", l2lAt=null, l2lErr="", feedUpdated="", schedErr="", pulling=false, rT=null;
@@ -319,7 +320,7 @@ function allRunsOf(line,date){return (((S.plans[date]||{})[line])||((REMOTE[date
 // runs with planned start/end times (older schedules have none: daily totals only)
 function runsSorted(line,date){var r=allRunsOf(line,date).filter(function(x){return x.s!=null});r.sort(function(a,b){return a.s-b.s});return r}
 function akey(d,l,h,r){return d+"|"+l+"|"+h+"|"+r}
-function effAct(d,l,h,r){var k=akey(d,l,h,r);if(k in S.acts)return S.acts[k];return k in AUTO?AUTO[k]:null}
+function effAct(d,l,h,r){var k=akey(d,l,h,r);if(k in S.acts)return S.acts[k];if(S.mrun&&(d+"|"+l+"|"+r) in S.mrun)return null;return k in AUTO?AUTO[k]:null}   // a manual run total replaces L2L for that product
 function madeOf(d,l,ri){var t=0;for(var h=0;h<NH;h++){var v=effAct(d,l,h,ri);if(v!=null)t+=v}return t}
 function doneOf(d,l,ri){var v=S.dones[d+"|"+l+"|"+ri];return v==null?null:v}
 function thr(){var v=parseFloat($("thr").value);return isNaN(v)?.95:Math.max(0,Math.min(1,v/100))}
@@ -643,7 +644,7 @@ function trSummary(data){
   var H=capH(),h='',pc=function(v){return v==null?'&ndash;':v.toFixed(1)+'%'};
   var byL={};TRACKED.forEach(function(l){byL[l]=[]});data.forEach(function(m){byL[m.line].push(m)});
   var all=agg(data);
-  h+='\u0001ln\u0001<h3 class="gh">By line, whole date range</h3><div class="card fs tw"><table><tr><th>LINE</th><th class="r">DAYS RUN</th><th class="r">OEE (est.)</th><th class="r">UTILIZATION</th><th class="r">MADE vs SCHEDULED</th><th class="r">CHANGEOVERS</th><th class="r">PER DAY RUN</th></tr>';
+  h+='\u0001ln\u0001<h3 class="gh">By line, whole date range</h3><div class="card fs tw"><table><tr><th>LINE</th><th class="r">DAYS RUN</th><th class="r">OEE (est.)</th><th class="r">UTILIZATION</th><th class="r">MADE vs SCHEDULED</th><th class="r">CHANGEOVERS</th><th class="r">CHANGEOVERS PER DAY</th></tr>';
   TRACKED.concat(["ALL"]).forEach(function(l){var a=l==="ALL"?all:agg(byL[l]);if(!a.ld)return;
     var util=100*a.hrs/(H*a.ld);
     h+='<tr><td><b>'+l+'</b></td><td class="r">'+a.ld+'</td><td class="r"><b>'+pc(metricVal(a,"oee"))+'</b></td><td class="r">'+util.toFixed(1)+'%</td><td class="r">'+pc(metricVal(a,"att"))+'</td><td class="r">'+fmt(a.co)+'</td><td class="r">'+(a.co/a.ld).toFixed(1)+'</td></tr>'});
@@ -656,13 +657,22 @@ function trSummary(data){
     var col=function(x){return x==null?'':x>=95?'background:#e2f4e6':x>=85?'background:#fdf3d0':'background:#fadcd8'};
     h+='<tr><td><b>'+pretty(k)+'</b></td><td class="r">'+fmt(rnd(a.schedHas))+'</td><td class="r">'+fmt(rnd(a.made))+'</td><td class="r" style="'+col(v)+'"><b>'+pc(v)+'</b></td>'+TRACKED.map(function(l){var x=metricVal(agg(wk[k][l]||[]),"att");return '<td class="r" style="'+col(x)+'">'+pc(x)+'</td>'}).join("")+'</tr>'});
   h+='</table></div><div class="sub">Attainment = cases made / cases scheduled, only on days that have cases made. Green 95%+, amber 85-95%, red under 85%.</div>';
-  // shortest orders
-  var runs=[];data.days.forEach(function(d){TRACKED.forEach(function(l){allRunsOf(l,d).forEach(function(r){if(r.need>0)runs.push({d:d,l:l,r:r})})})});
-  runs.sort(function(a,b){return a.r.need-b.r.need});
-  var med=runs.length?runs[Math.floor(runs.length/2)].r.need:0;
-  h+='\u0001sh\u0001<h3 class="gh">Shortest orders <span class="sub" style="font-weight:400">(fewest cases per run; median run is '+fmt(rnd(med))+' cases, '+fmt(runs.length)+' runs)</span></h3><div class="card fs tw"><table><tr><th>DATE</th><th>LINE</th><th>ITEM</th><th>PRODUCT</th><th class="r">CASES</th><th class="r">HOURS</th><th class="r">MADE</th></tr>';
-  runs.slice(0,15).forEach(function(x){h+='<tr><td>'+pretty(x.d)+'</td><td><b>'+x.l+'</b></td><td>'+esc(x.r.item)+'</td><td>'+esc(x.r.name)+'</td><td class="r"><b>'+fmt(rnd(x.r.need))+'</b></td><td class="r">'+runHrs(x.r).toFixed(2)+'</td><td class="r">'+(x.r.made>0?fmt(rnd(x.r.made)):'')+'</td></tr>'});
-  h+='</table></div><div class="sub">Short runs mean more changeovers per case. The same list for each line is in the Excel export (Runs sheet, sort by Cases).</div>';
+  // shortest orders: one column per line, with the product's average order size
+  var byLn={};TRACKED.forEach(function(l){byLn[l]=[]});
+  data.days.forEach(function(d){TRACKED.forEach(function(l){allRunsOf(l,d).forEach(function(r){if(r.need>0)byLn[l].push({d:d,r:r})})})});
+  var N=10,cols={},tot=0;
+  TRACKED.forEach(function(l){
+    var rs=byLn[l],sums={};rs.forEach(function(x){var k=k6(x.r.item)||x.r.item,q=sums[k]=sums[k]||{n:0,t:0};q.n++;q.t+=x.r.need});
+    var sorted=rs.slice().sort(function(a,b){return a.r.need-b.r.need}),med=sorted.length?sorted[Math.floor(sorted.length/2)].r.need:0;
+    cols[l]={list:sorted.slice(0,N),sums:sums,med:med,n:rs.length};tot+=rs.length});
+  h+='\u0001sh\u0001<h3 class="gh">Shortest orders by line <span class="sub" style="font-weight:400">('+fmt(tot)+' runs)</span></h3><div class="sub" style="margin-bottom:6px">Each column is a line, shortest run first. Under the number of cases: the product, the date, and the average cases that product runs on that line.</div><div class="card tw"><table class="ov shl"><tr><th></th>'+TRACKED.map(function(l){return '<th>'+l+'</th>'}).join("")+'</tr>';
+  h+='<tr><td class="ln" style="font-size:12px;text-align:left">TYPICAL RUN</td>'+TRACKED.map(function(l){return '<td style="background:#eef2f8"><b>'+fmt(rnd(cols[l].med))+'</b><span class="sub">median cases ('+cols[l].n+' runs)</span></td>'}).join("")+'</tr>';
+  for(var i=0;i<N;i++){
+    h+='<tr><td class="ln" style="font-size:12px;text-align:left">#'+(i+1)+'</td>'+TRACKED.map(function(l){var x=cols[l].list[i];if(!x)return '<td class="c-none">&ndash;</td>';
+      var k=k6(x.r.item)||x.r.item,q=cols[l].sums[k];
+      return '<td title="'+esc(x.r.name)+'"><b>'+fmt(rnd(x.r.need))+' cases</b><span class="sub">'+esc(x.r.name.slice(0,26))+'</span><span class="sub">'+pretty(x.d).slice(0,5)+' &middot; avg '+fmt(rnd(q.t/q.n))+' ('+q.n+' runs)</span></td>'}).join("")+'</tr>';
+  }
+  h+='</table></div><div class="sub">Short runs mean more changeovers per case. The average is that product on that line over the dates you picked.</div>';
   return h;
 }
 function buildTrends(){
@@ -759,7 +769,7 @@ async function syncFlush(){
 function applyRemote(x){
   if(SYNC.pend[x.k]!==undefined)return false;                 // our own newer edit is still waiting to be sent
   var p=x.k.split("|"),kind=p[0],key=p.slice(1).join("|"),val=x.deleted?null:x.v,store,cur;
-  if(kind==="a")store=S.acts;else if(kind==="n")store=S.notes;else if(kind==="d")store=S.dones;else if(kind==="u")store=S.upc;
+  if(kind==="m")store=S.mrun;else if(kind==="a")store=S.acts;else if(kind==="n")store=S.notes;else if(kind==="d")store=S.dones;else if(kind==="u")store=S.upc;
   else if(kind==="p"){                                       // a schedule loaded in the app on any device
     var pp=key.split("|"),pd=pp[0],pl=pp[1];
     if(val==null){if(!(S.plans[pd]&&S.plans[pd][pl]))return false;delete S.plans[pd][pl];return true}
@@ -806,6 +816,7 @@ async function syncInit(){
     Object.keys(S.notes).forEach(function(k){syncPush("n",k,S.notes[k])});
     Object.keys(S.dones).forEach(function(k){syncPush("d",k,S.dones[k])});
     Object.keys(S.upc).forEach(function(k){syncPush("u",k,S.upc[k])});
+    Object.keys(S.mrun||{}).forEach(function(k){syncPush("m",k,S.mrun[k])});
     Object.keys(S.running).forEach(function(rk){Object.keys(S.running[rk]).forEach(function(ri){syncPush("r",rk+"|"+ri,S.running[rk][ri])})});
     S.syncMig=1;save();
   }
@@ -1158,41 +1169,57 @@ function fsCompliance(st,today){
   return h;
 }
 var MC={line:"MP4"};
-function mcClear(d,l){var n=0;Object.keys(S.acts).forEach(function(k){var p=k.split("|");if(p[0]===d&&(!l||p[1]===l)){delete S.acts[k];syncPush("a",k,null);n++}});return n}
-function mcSetHour(d,l,h,txt){
-  var res=engine(l,d),runs=res.runs,prods=res.hours[h].prods;
-  runs.forEach(function(r,ri){var k=akey(d,l,h,ri);if(k in S.acts){delete S.acts[k];syncPush("a",k,null)}});
+function mrKey(d,l,ri){return d+"|"+l+"|"+ri}
+function mcClearRun(d,l,ri){
+  for(var h=0;h<NH;h++){var k=akey(d,l,h,ri);if(k in S.acts){delete S.acts[k];syncPush("a",k,null)}}
+  var mk=mrKey(d,l,ri);if(mk in S.mrun){delete S.mrun[mk];syncPush("m",mk,null)}
+}
+function mcClear(d,l){
+  Object.keys(S.acts).forEach(function(k){var p=k.split("|");if(p[0]===d&&(!l||p[1]===l)){delete S.acts[k];syncPush("a",k,null)}});
+  Object.keys(S.mrun).forEach(function(k){var p=k.split("|");if(p[0]===d&&(!l||p[1]===l)){delete S.mrun[k];syncPush("m",k,null)}});
+}
+// the typed total for a run is spread over the hours the run was scheduled (up to now), so every hourly view stays consistent
+function mcSetRun(d,l,ri,txt){
+  mcClearRun(d,l,ri);
   txt=String(txt).replace(/[^0-9.]/g,"");if(txt===""){save();return}
-  var total=parseFloat(txt);if(isNaN(total)||!prods.length){save();return}
-  var wsum=0;prods.forEach(function(q){wsum+=q.exp});
-  var vals=prods.map(function(q){return wsum>0?total*q.exp/wsum:total/prods.length}),sum=0;
-  vals=vals.map(function(v){v=Math.round(v);sum+=v;return v});
-  vals[0]+=Math.round(total)-sum;                                   // keep the typed total exact
-  prods.forEach(function(q,i){var k=akey(d,l,h,q.ri);S.acts[k]=Math.max(0,vals[i]);syncPush("a",k,S.acts[k])});
-  save();
+  var M=Math.round(parseFloat(txt));if(isNaN(M)){save();return}
+  var res=engine(l,d),r=res.runs[ri];if(!r){save();return}
+  var now=nowRel(d),w=[],sum=0,h;
+  for(h=0;h<NH;h++){var hs=DAY0+60*h,ov=Math.max(0,Math.min(hs+60,r.e)-Math.max(hs,r.s));if(hs>=now)ov=0;w.push(ov);sum+=ov}
+  if(sum<=0){for(h=0;h<NH;h++){var hs2=DAY0+60*h;if(Math.min(hs2+60,r.e)-Math.max(hs2,r.s)>0){w[h]=1;sum=1;break}}}
+  if(sum<=0){w[0]=1;sum=1}
+  var vals=w.map(function(x){return Math.round(M*x/sum)}),tot=0,lastH=0;
+  vals.forEach(function(v,i){tot+=v;if(w[i]>0)lastH=i});
+  vals[lastH]+=M-tot;
+  vals.forEach(function(v,i){if(w[i]>0){var k=akey(d,l,i,ri);S.acts[k]=Math.max(0,v);syncPush("a",k,S.acts[k])}});
+  S.mrun[mrKey(d,l,ri)]=M;syncPush("m",mrKey(d,l,ri),M);save();
 }
 function buildManual(date){
   var h='<h2>Manual counts</h2>';
   if(!date)return h+'<div class="sub">No schedule loaded.</div>';
   if(TRACKED.indexOf(MC.line)<0)MC.line=TRACKED[0];
   var l=MC.line;
-  h+='<div class="sub" style="margin-bottom:8px">Type the cases a line really made in an hour if L2L is wrong. Your number replaces L2L for that hour until you clear it. Day: <b>'+dayname(date)+' '+pretty(date)+'</b> (change it with the date box at the top).</div>';
+  h+='<div class="sub" style="margin-bottom:8px">Type the total cases made so far for each product if L2L is wrong. It replaces L2L for that product until you clear it, and tick <b>Completed</b> when the run is finished. Day: <b>'+dayname(date)+' '+pretty(date)+'</b> (change it with the date box at the top).</div>';
   h+='<div class="seg">'+TRACKED.map(function(x){return '<button class="'+(x===l?'on':'')+'" data-mcline="'+x+'">'+x+'</button>'}).join("")+'</div>';
   if(!runsSorted(l,date).length)return h+'<div class="card note-card">'+l+' has no hourly schedule on this day.</div>';
-  var res=engine(l,date),nov=0,rows='';
-  for(var hI=0;hI<NH;hI++){
-    var HH=res.hours[hI],auto=0,hasAuto=false,man=0,hasMan=false,used=0;
-    res.runs.forEach(function(r,ri){var k=akey(date,l,hI,ri);
-      if(k in AUTO){auto+=AUTO[k];hasAuto=true}
-      if(k in S.acts){man+=S.acts[k];hasMan=true}
-      var v=effAct(date,l,hI,ri);if(v!=null)used+=v});
-    if(!HH.prods.length&&!hasAuto&&!hasMan)continue;
-    if(hasMan)nov++;
-    rows+='<tr'+(hasMan?' class="ov-on"':'')+'><td class="hrc">'+hr(HH.hs)+'-'+hr(HH.he)+'</td><td class="pr">'+(HH.prods.length?HH.prods.map(function(q){return '<span class="sw" style="background:'+prodColor(q.item)[1]+'"></span>'+esc(String(q.item).slice(-6))}).join(" &nbsp;"):'<span style="color:#9aa5b5;font-style:italic">nothing scheduled</span>')+'</td><td class="ex">'+fmt(HH.exp)+'</td><td class="ex">'+(hasAuto?fmt(rnd(auto)):'<span style="color:#b4bdca">&ndash;</span>')+'</td><td><input class="mcin" inputmode="decimal" placeholder="type cases" data-mc="'+hI+'" value="'+(hasMan?rnd(man):'')+'"'+(HH.prods.length?'':' disabled')+'></td><td class="ex"><b>'+((hasAuto||hasMan)?fmt(rnd(used)):'<span style="color:#b4bdca">&ndash;</span>')+'</b>'+(hasMan?' <span class="tg">manual</span>':'')+'</td></tr>';
-  }
-  h+='<div class="card tw"><table class="hr hl" style="margin:0"><thead><tr><th>HOUR</th><th>PRODUCTS</th><th style="text-align:right">EXPECTED</th><th style="text-align:right">L2L</th><th>MANUAL</th><th style="text-align:right">USED</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
-  h+='<div class="sub" style="margin:8px 0">'+nov+' manual hour(s) on '+l+' this day. If an hour has several products, your total is split by what each product was expected to make; for exact per-product numbers use the line tab. Press Enter or tap outside the box to save.</div>';
-  h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-mcclear="line">Clear manual counts for '+l+' today</button><button class="btn" data-mcclear="day">Clear for all lines this day</button><button class="btn" data-mcclear="all">Clear ALL manual counts</button></div>';
+  var res=engine(l,date),now=nowRel(date),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),last=res.hours[NH-1],rows='',T={need:0,due:0,made:0},nman=0;
+  res.runs.forEach(function(r,ri){
+    var hasM=mrKey(date,l,ri) in S.mrun,l2l=0,hasL=false;
+    for(var hh=0;hh<NH;hh++){var k=akey(date,l,hh,ri);if(k in AUTO){l2l+=AUTO[k];hasL=true}}
+    var made=last.A[ri],due=idx>=0?res.hours[idx].S[ri]:0,diff=made-due,dh=doneOf(date,l,ri),started=due>0.5||made>0.5;
+    T.need+=r.need;T.due+=due;T.made+=made;if(hasM)nman++;
+    var st=dh!=null?'<span class="res y">COMPLETED</span>':(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'on pace':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')));
+    rows+='<tr'+(hasM?' class="ov-on"':'')+'><td class="pc" style="border-left:5px solid '+prodColor(r.item)[1]+'"><b>'+esc(String(r.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,44))+'<div class="sub">'+(r.s!=null?clock(r.s)+' - '+clock(r.e):'')+'</div></td>'+
+      '<td class="ex">'+fmt(rnd(r.need))+'</td><td class="ex">'+fmt(rnd(due))+'</td><td class="ex">'+(hasL?fmt(rnd(l2l)):'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
+      '<td><input class="mcin" inputmode="decimal" placeholder="cases made" data-mcrun="'+ri+'" value="'+(hasM?rnd(S.mrun[mrKey(date,l,ri)]):'')+'"></td>'+
+      '<td class="ex"><b>'+fmt(rnd(made))+'</b>'+(hasM?' <span class="tg">manual</span>':'')+'<div class="sub">'+Math.round(100*made/Math.max(1,r.need))+'% of run</div></td><td class="ex">'+st+'</td>'+
+      '<td style="text-align:center"><input type="checkbox" data-mcdone="'+ri+'"'+(dh!=null?' checked':'')+'></td></tr>';
+  });
+  var td=T.made-T.due;
+  h+='<div class="card tw"><table class="hr hl" style="margin:0"><thead><tr><th>PRODUCT</th><th style="text-align:right">RUN CASES</th><th style="text-align:right">DUE BY NOW</th><th style="text-align:right">L2L</th><th>MANUAL TOTAL</th><th style="text-align:right">MADE</th><th style="text-align:right">AHEAD / BEHIND</th><th class="c">COMPLETED</th></tr></thead><tbody>'+rows+
+    '<tr><td class="effsum" colspan="8" style="text-align:left">'+l+' TOTAL &nbsp; made '+fmt(rnd(T.made))+' of '+fmt(rnd(T.due))+' due by now &middot; '+(Math.abs(td)<0.5?'on pace':(td>0?fmt(rnd(td))+' ahead':fmt(rnd(-td))+' behind'))+' &middot; '+fmt(rnd(T.need))+' scheduled for the day</td></tr></tbody></table></div>';
+  h+='<div class="sub" style="margin:8px 0">"Due by now" counts only hours that have finished. A manual total is spread over the hours that product was scheduled, so the line tab and Board agree with it. Update the number as more is made. '+nman+' manual product(s) on '+l+' this day.</div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-mcclear="line">Clear manual counts for '+l+' this day</button><button class="btn" data-mcclear="day">Clear for all lines this day</button><button class="btn" data-mcclear="all">Clear ALL manual counts</button></div>';
   return h;
 }
 function buildFull(date){
@@ -1308,7 +1335,7 @@ document.addEventListener("click",function(e){
   var t=e.target.closest("[data-mcline],[data-mcclear],[data-fday],[data-fsec],[data-trsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
   if(t.dataset.mcline){MC.line=t.dataset.mcline;render();return}
   if(t.dataset.mcclear){var dd=curDate(),kind=t.dataset.mcclear;
-    if(kind==="all"){if(!confirm("Clear EVERY manual count on every day? L2L numbers will be used again."))return;var n0=0;Object.keys(S.acts).forEach(function(k){delete S.acts[k];syncPush("a",k,null);n0++});save();applyAll();render();return}
+    if(kind==="all"){if(!confirm("Clear EVERY manual count on every day? L2L numbers will be used again."))return;Object.keys(S.acts).forEach(function(k){delete S.acts[k];syncPush("a",k,null)});Object.keys(S.mrun).forEach(function(k){delete S.mrun[k];syncPush("m",k,null)});save();applyAll();render();return}
     if(!confirm("Clear the manual counts for "+(kind==="line"?MC.line+" on ":"all lines on ")+pretty(dd)+"? L2L numbers will be used again."))return;
     mcClear(dd,kind==="line"?MC.line:null);save();applyAll();render();return}
   if(t.dataset.fsec){FS.sec=t.dataset.fsec;render();window.scrollTo(0,0);return}
@@ -1352,7 +1379,13 @@ document.addEventListener("change",function(e){
       if(!confirm(msg)){t.checked=false;return}S.dones[key]=h;syncPush("d",key,h)}
     else{delete S.dones[key];syncPush("d",key,null)}
     save();render();return}
-  if(t.dataset.mc!=null){mcSetHour(curDate(),MC.line,+t.dataset.mc,t.value);applyAll();render();return}
+  if(t.dataset.mcrun!=null){mcSetRun(curDate(),MC.line,+t.dataset.mcrun,t.value);applyAll();render();return}
+  if(t.dataset.mcdone!=null){var md=curDate(),mri=+t.dataset.mcdone,mkey=md+"|"+MC.line+"|"+mri;
+    if(t.checked){var mres=engine(MC.line,md),mr=mres.runs[mri],mnow=nowRel(md),mh=mnow<NH*60+DAY0?Math.min(NH-1,Math.max(0,Math.floor((mnow-DAY0)/60))):Math.min(NH-1,Math.max(0,Math.floor((mr.e-DAY0)/60))),msh=Math.round(mr.need-mres.hours[NH-1].A[mri]);
+      if(msh>0&&!confirm("Mark this run as completed? It is "+fmt(msh)+" cases short of "+fmt(rnd(mr.need))+" and will be recorded as SHORT."))  {t.checked=false;return}
+      S.dones[mkey]=mh;syncPush("d",mkey,mh)}
+    else{delete S.dones[mkey];syncPush("d",mkey,null)}
+    save();applyAll();render();return}
   if(t.id==="file"&&t.files[0]){onFile(t.files[0]);t.value=""}
   else if(t.id==="date"){applyAll();render()}
   else if(t.id==="view"){view=t.value;render()}
