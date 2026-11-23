@@ -167,6 +167,7 @@ table.hl td{padding:5px 8px;vertical-align:middle}table.hl tr.hg td{border-top:2
 table.hl td.pc{font-size:13px}table.hl tr.carry td.pc{color:#6b7787}table.hl tr.carry td{opacity:.9}table.hl td.hs{background:#f6f8fb;border-left:1px solid #e3e8ef}
 .tg{display:inline-block;font-size:10px;font-weight:700;color:#7a6a2a;background:#fbf1cf;border-radius:999px;padding:1px 7px;margin-left:4px}
 .cbar{height:12px;background:#e8edf3;border-radius:999px;overflow:hidden}.cbar i{display:block;height:100%;border-radius:999px}
+.mcin{width:120px;font:inherit;font-size:15px;padding:6px 8px;border:1px solid var(--line);border-radius:8px;text-align:right}.mcin:focus{outline:2px solid var(--gold)}tr.ov-on td{background:#fff8e1}
 </style>
 </head>
 <body>
@@ -834,10 +835,11 @@ function render(){
   var date=curDate(),t=thr(),th="";
   th+='<button class="tab'+("Board"===tab?" on":"")+'" data-tab="Board">Board</button>';
   TRACKED.forEach(function(l){th+='<button class="tab'+(l===tab?" on":"")+'" data-tab="'+l+'"><i class="'+tabDot(l,date,t)+'"></i>'+l+'</button>'});
-  [["Trends"," sep"],["Full schedule",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
+  [["Trends"," sep"],["Full schedule",""],["Manual counts",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
   $("tabs").innerHTML=th;
   var h="";
   if(tab==="Trends")h=buildTrends();
+  else if(tab==="Manual counts")h=buildManual(date);
   else if(!date)h='<div class="card welcome"><h2>Waiting for the schedule</h2><p class="sub" style="font-size:15px">It loads by itself from schedule.json. Or open Settings (gear) and choose the weekly workbook.</p>'+(schedErr?'<p class="sub" style="color:var(--badfg)">'+esc(schedErr)+'</p>':'')+'</div>';
   else if(tab==="Board")h=buildBoard(date);
   else if(tab==="Full schedule")h=buildFull(date);
@@ -1086,7 +1088,7 @@ function runTable(runs,now,full){
     h+='<tr'+cur+'>'+C.map(function(c){return '<td'+(c[3]?' class="r"':'')+'>'+c[1](r)+'</td>'}).join("")+'</tr>'});
   return h+'</table>';
 }
-var FS={metric:"util",sec:"ov",per:"4w",line:"ALL",all:false};
+var FS={metric:"util",sec:"ov",per:"today",line:"ALL",all:false};
 function segNav(list,cur,attr){return '<div class="seg">'+list.map(function(x){return '<button class="'+(x[0]===cur?'on':'')+'" data-'+attr+'="'+x[0]+'">'+x[1]+'</button>'}).join("")+'</div>'}
 function pickSec(h,cur){var p=h.split("\u0001"),head=p[0],map={};for(var i=1;i<p.length;i+=2)map[p[i]]=p[i+1]||"";return {head:head,body:(cur in map)?map[cur]:""}}
 function fsStats(){
@@ -1113,7 +1115,28 @@ function fsCell(o,metric,H,nL){
 }
 function fsRanges(ds){var out=[],i=0;while(i<ds.length){var j=i;while(j+1<ds.length&&ds[j+1]===addDays(ds[j],dowI(ds[j])===4?3:1))j++;out.push(j>i?pretty(ds[i])+" to "+pretty(ds[j]):pretty(ds[i]));i=j+1}return out}
 function dowI(d){return (new Date(d+"T12:00:00").getDay()+6)%7}
+function fsCtl(){return '<div class="ctl"><label>PERIOD</label><select id="fsPer">'+[["today","Today"],["wk","This week"],["4w","Last 4 weeks"],["all","Whole year"]].map(function(o){return '<option value="'+o[0]+'"'+(FS.per===o[0]?" selected":"")+'>'+o[1]+'</option>'}).join("")+'</select><label>LINE</label><select id="fsLine"><option value="ALL">All lines</option>'+TRACKED.map(function(l){return '<option'+(FS.line===l?" selected":"")+'>'+l+'</option>'}).join("")+'</select></div>'}
+function fsToday(){
+  var d=opDay(),now=nowRel(d),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),P={},any=false;
+  TRACKED.forEach(function(l){
+    if((FS.line!=="ALL"&&l!==FS.line)||!runsSorted(l,d).length)return;
+    any=true;var res=engine(l,d),last=res.hours[NH-1];
+    res.runs.forEach(function(r,ri){var k=k6(r.item)||r.item,p=P[k]=P[k]||{name:r.name,day:0,made:0,now:0,lines:{}};
+      p.day+=r.need;p.made+=last.A[ri];p.now+=idx>=0?res.hours[idx].S[ri]:0;p.lines[l]=1})});
+  var h='';
+  if(!any)return {any:false,h:'<div class="card note-card">Nothing is scheduled with times for today ('+pretty(d)+'), so there is no live compliance. Use This week or Last 4 weeks for finished days.</div>'};
+  var ks=Object.keys(P),T={day:0,made:0,now:0};ks.forEach(function(k){T.day+=P[k].day;T.made+=P[k].made;T.now+=P[k].now});
+  ks.sort(function(a,b){return (P[b].now-P[b].made)-(P[a].now-P[a].made)});
+  var col=function(p){return p>=95?"#4caf78":p>=85?"#e8b93c":"#d9665a"};
+  var pace=T.now>0?100*T.made/T.now:null;
+  h+='<div class="card" style="padding:12px 16px;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:26px">'+(pace==null?'&ndash;':pace.toFixed(0)+'%')+'</b><span>of what should be made by now ('+fmt(rnd(T.made))+' of '+fmt(rnd(T.now))+' cases)</span></div>'+(pace!=null?'<div class="cbar" style="margin-top:8px"><i style="width:'+Math.min(100,pace)+'%;background:'+col(pace)+'"></i></div>':'')+'<div class="sub" style="margin-top:6px">Whole day: '+fmt(rnd(T.made))+' of '+fmt(rnd(T.day))+' scheduled ('+(T.day>0?(100*T.made/T.day).toFixed(0):0)+'%). "By now" counts completed hours only, as of '+clock(now)+'.</div></div>';
+  var rows=ks.map(function(k){var p=P[k],pc=p.now>0?100*p.made/p.now:null,sh=p.now-p.made;
+    return '<tr><td><b>'+esc(p.name.slice(0,48))+'</b><div class="sub">'+esc(k)+' &middot; '+Object.keys(p.lines).join(", ")+'</div></td><td style="min-width:160px">'+(pc==null?'<span class="sub">not started</span>':'<div class="cbar"><i style="width:'+Math.min(100,pc)+'%;background:'+col(pc)+'"></i></div>')+'</td><td class="r"><b>'+(pc==null?'&ndash;':pc.toFixed(0)+'%')+'</b></td><td class="r">'+fmt(rnd(p.made))+' of '+fmt(rnd(p.now))+'</td><td class="r">'+fmt(rnd(p.day))+'</td><td class="r" style="color:'+(sh>0.5?'var(--badfg)':'var(--okfg)')+'">'+(p.now<=0?'':(sh>0.5?'-'+fmt(rnd(sh)):'+'+fmt(rnd(-sh))))+'</td></tr>'}).join("");
+  h+='<div class="sub" style="margin-bottom:6px">Biggest gaps first. Green 95%+, amber 85-95%, red under 85%. Counts come from L2L and anything typed on the Manual counts tab.</div><div class="card fs tw"><table><tr><th>PRODUCT</th><th></th><th class="r">ON PACE</th><th class="r">MADE OF DUE BY NOW</th><th class="r">DAY TOTAL</th><th class="r">BEHIND</th></tr>'+rows+'</table></div>';
+  return {any:true,h:h};
+}
 function fsCompliance(st,today){
+  if(FS.per==="today"){var tdy=fsToday();return '<h3 class="gh">Compliance by product</h3>'+fsCtl()+tdy.h}
   var from=FS.per==="wk"?mondayOf(today):FS.per==="4w"?addDays(today,-27):"0000-00-00";
   var P={},tot={need:0,made:0,none:0,runs:0};
   st.runs.forEach(function(x){
@@ -1126,12 +1149,50 @@ function fsCompliance(st,today){
   var row=function(k){var p=P[k],pc=100*p.made/p.need,sh=p.need-p.made;
     return '<tr><td><b>'+esc(p.name.slice(0,48))+'</b><div class="sub">'+esc(k)+' &middot; '+Object.keys(p.lines).join(", ")+'</div></td><td style="min-width:180px"><div class="cbar"><i style="width:'+Math.min(100,pc)+'%;background:'+col(pc)+'"></i></div></td><td class="r"><b>'+pc.toFixed(0)+'%</b></td><td class="r">'+fmt(rnd(p.made))+' of '+fmt(rnd(p.need))+'</td><td class="r" style="color:'+(sh>0.5?'var(--badfg)':'var(--okfg)')+'">'+(sh>0.5?'-'+fmt(rnd(sh)):'+'+fmt(rnd(-sh)))+'</td></tr>'};
   var head='<table><tr><th>PRODUCT</th><th></th><th class="r">DONE</th><th class="r">MADE OF SCHEDULED</th><th class="r">SHORT</th></tr>';
-  var h='<h3 class="gh">Compliance by product</h3><div class="ctl"><label>PERIOD</label><select id="fsPer"><option value="wk"'+(FS.per==="wk"?" selected":"")+'>This week</option><option value="4w"'+(FS.per==="4w"?" selected":"")+'>Last 4 weeks</option><option value="all"'+(FS.per==="all"?" selected":"")+'>Whole year</option></select><label>LINE</label><select id="fsLine"><option value="ALL">All lines</option>'+TRACKED.map(function(l){return '<option'+(FS.line===l?" selected":"")+'>'+l+'</option>'}).join("")+'</select></div>';
+  var h='<h3 class="gh">Compliance by product</h3>'+fsCtl();
   if(!tot.need)return h+'<div class="card note-card">No cases made are recorded for this period yet.</div>';
   var oc=100*tot.made/tot.need;
   h+='<div class="card" style="padding:12px 16px;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:26px">'+oc.toFixed(1)+'%</b><span>of scheduled cases were made ('+fmt(rnd(tot.made))+' of '+fmt(rnd(tot.need))+')</span></div><div class="cbar" style="margin-top:8px"><i style="width:'+Math.min(100,oc)+'%;background:'+col(oc)+'"></i></div>'+(tot.none?'<div class="sub" style="margin-top:6px">'+tot.none+' of '+tot.runs+' runs have no cases-made entry and are left out.</div>':'')+'</div>';
   h+='<div class="sub" style="margin-bottom:6px">Biggest shortfalls first. Green 95%+, amber 85-95%, red under 85%.</div><div class="card fs tw">'+head+ks.slice(0,12).map(row).join("")+'</table></div>';
   if(ks.length>12)h+='<details style="margin-bottom:8px"><summary class="sub" style="cursor:pointer">Show the other '+(ks.length-12)+' products</summary><div class="card fs tw">'+head+ks.slice(12).map(row).join("")+'</table></div></details>';
+  return h;
+}
+var MC={line:"MP4"};
+function mcClear(d,l){var n=0;Object.keys(S.acts).forEach(function(k){var p=k.split("|");if(p[0]===d&&(!l||p[1]===l)){delete S.acts[k];syncPush("a",k,null);n++}});return n}
+function mcSetHour(d,l,h,txt){
+  var res=engine(l,d),runs=res.runs,prods=res.hours[h].prods;
+  runs.forEach(function(r,ri){var k=akey(d,l,h,ri);if(k in S.acts){delete S.acts[k];syncPush("a",k,null)}});
+  txt=String(txt).replace(/[^0-9.]/g,"");if(txt===""){save();return}
+  var total=parseFloat(txt);if(isNaN(total)||!prods.length){save();return}
+  var wsum=0;prods.forEach(function(q){wsum+=q.exp});
+  var vals=prods.map(function(q){return wsum>0?total*q.exp/wsum:total/prods.length}),sum=0;
+  vals=vals.map(function(v){v=Math.round(v);sum+=v;return v});
+  vals[0]+=Math.round(total)-sum;                                   // keep the typed total exact
+  prods.forEach(function(q,i){var k=akey(d,l,h,q.ri);S.acts[k]=Math.max(0,vals[i]);syncPush("a",k,S.acts[k])});
+  save();
+}
+function buildManual(date){
+  var h='<h2>Manual counts</h2>';
+  if(!date)return h+'<div class="sub">No schedule loaded.</div>';
+  if(TRACKED.indexOf(MC.line)<0)MC.line=TRACKED[0];
+  var l=MC.line;
+  h+='<div class="sub" style="margin-bottom:8px">Type the cases a line really made in an hour if L2L is wrong. Your number replaces L2L for that hour until you clear it. Day: <b>'+dayname(date)+' '+pretty(date)+'</b> (change it with the date box at the top).</div>';
+  h+='<div class="seg">'+TRACKED.map(function(x){return '<button class="'+(x===l?'on':'')+'" data-mcline="'+x+'">'+x+'</button>'}).join("")+'</div>';
+  if(!runsSorted(l,date).length)return h+'<div class="card note-card">'+l+' has no hourly schedule on this day.</div>';
+  var res=engine(l,date),nov=0,rows='';
+  for(var hI=0;hI<NH;hI++){
+    var HH=res.hours[hI],auto=0,hasAuto=false,man=0,hasMan=false,used=0;
+    res.runs.forEach(function(r,ri){var k=akey(date,l,hI,ri);
+      if(k in AUTO){auto+=AUTO[k];hasAuto=true}
+      if(k in S.acts){man+=S.acts[k];hasMan=true}
+      var v=effAct(date,l,hI,ri);if(v!=null)used+=v});
+    if(!HH.prods.length&&!hasAuto&&!hasMan)continue;
+    if(hasMan)nov++;
+    rows+='<tr'+(hasMan?' class="ov-on"':'')+'><td class="hrc">'+hr(HH.hs)+'-'+hr(HH.he)+'</td><td class="pr">'+(HH.prods.length?HH.prods.map(function(q){return '<span class="sw" style="background:'+prodColor(q.item)[1]+'"></span>'+esc(String(q.item).slice(-6))}).join(" &nbsp;"):'<span style="color:#9aa5b5;font-style:italic">nothing scheduled</span>')+'</td><td class="ex">'+fmt(HH.exp)+'</td><td class="ex">'+(hasAuto?fmt(rnd(auto)):'<span style="color:#b4bdca">&ndash;</span>')+'</td><td><input class="mcin" inputmode="decimal" placeholder="type cases" data-mc="'+hI+'" value="'+(hasMan?rnd(man):'')+'"'+(HH.prods.length?'':' disabled')+'></td><td class="ex"><b>'+((hasAuto||hasMan)?fmt(rnd(used)):'<span style="color:#b4bdca">&ndash;</span>')+'</b>'+(hasMan?' <span class="tg">manual</span>':'')+'</td></tr>';
+  }
+  h+='<div class="card tw"><table class="hr hl" style="margin:0"><thead><tr><th>HOUR</th><th>PRODUCTS</th><th style="text-align:right">EXPECTED</th><th style="text-align:right">L2L</th><th>MANUAL</th><th style="text-align:right">USED</th></tr></thead><tbody>'+rows+'</tbody></table></div>';
+  h+='<div class="sub" style="margin:8px 0">'+nov+' manual hour(s) on '+l+' this day. If an hour has several products, your total is split by what each product was expected to make; for exact per-product numbers use the line tab. Press Enter or tap outside the box to save.</div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-mcclear="line">Clear manual counts for '+l+' today</button><button class="btn" data-mcclear="day">Clear for all lines this day</button><button class="btn" data-mcclear="all">Clear ALL manual counts</button></div>';
   return h;
 }
 function buildFull(date){
@@ -1244,7 +1305,12 @@ function onFile(f){
   fr.readAsArrayBuffer(f);
 }
 document.addEventListener("click",function(e){
-  var t=e.target.closest("[data-fday],[data-fsec],[data-trsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  var t=e.target.closest("[data-mcline],[data-mcclear],[data-fday],[data-fsec],[data-trsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  if(t.dataset.mcline){MC.line=t.dataset.mcline;render();return}
+  if(t.dataset.mcclear){var dd=curDate(),kind=t.dataset.mcclear;
+    if(kind==="all"){if(!confirm("Clear EVERY manual count on every day? L2L numbers will be used again."))return;var n0=0;Object.keys(S.acts).forEach(function(k){delete S.acts[k];syncPush("a",k,null);n0++});save();applyAll();render();return}
+    if(!confirm("Clear the manual counts for "+(kind==="line"?MC.line+" on ":"all lines on ")+pretty(dd)+"? L2L numbers will be used again."))return;
+    mcClear(dd,kind==="line"?MC.line:null);save();applyAll();render();return}
   if(t.dataset.fsec){FS.sec=t.dataset.fsec;render();window.scrollTo(0,0);return}
   if(t.dataset.trsec){TR.sec=t.dataset.trsec;render();return}
   if(t.dataset.fday){$("date").value=t.dataset.fday;FS.sec="day";applyAll();render();window.scrollTo(0,0);return}
@@ -1286,6 +1352,7 @@ document.addEventListener("change",function(e){
       if(!confirm(msg)){t.checked=false;return}S.dones[key]=h;syncPush("d",key,h)}
     else{delete S.dones[key];syncPush("d",key,null)}
     save();render();return}
+  if(t.dataset.mc!=null){mcSetHour(curDate(),MC.line,+t.dataset.mc,t.value);applyAll();render();return}
   if(t.id==="file"&&t.files[0]){onFile(t.files[0]);t.value=""}
   else if(t.id==="date"){applyAll();render()}
   else if(t.id==="view"){view=t.value;render()}
