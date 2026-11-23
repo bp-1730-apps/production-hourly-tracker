@@ -89,12 +89,10 @@ def find_lines():
         print(name, "->", LINES.get(name, "NOT FOUND"))
 
 
-def pull(line):
-    d = NOW.date()
-    a = (d - datetime.timedelta(days=2)).isoformat() + " 12:00:00"
-    b = (d + datetime.timedelta(days=1)).isoformat() + " 12:00:00"
+def pull_range(line, a, b):
+    """All pitch records of one line with pitch_start between a and b ('YYYY-MM-DD HH:MM:SS'), product codes filled in."""
     rows, offset = [], 0
-    while offset < 5000:
+    while offset < 20000:
         j = get("pitches", {"line": LINES[line], "pitch_start__gte": a, "pitch_start__lte": b, "limit": 500, "offset": offset})
         if isinstance(j, dict) and j.get("success") is False:
             raise RuntimeError("L2L says: %s" % j.get("error"))
@@ -107,6 +105,11 @@ def pull(line):
         r["actual_product_code"] = product(id_of(r.get("actual_product") or r.get("actual_product_id")))
         r["planned_product_code"] = product(id_of(r.get("planned_product") or r.get("planned_product_id") or r.get("product") or r.get("product_id")))
     return rows
+
+
+def pull(line):
+    d = NOW.date()
+    return pull_range(line, (d - datetime.timedelta(days=2)).isoformat() + " 00:00:00", (d + datetime.timedelta(days=1)).isoformat() + " 12:00:00")
 
 
 def main():
@@ -137,4 +140,5 @@ def main():
         sys.exit(1)
 
 
-main()
+if __name__ == "__main__":
+    main()
