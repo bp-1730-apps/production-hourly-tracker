@@ -5,6 +5,7 @@ on:
       - "**/*.xlsb"
       - "**/*.xlsx"
       - "**/*.xlsm"
+      - ".github/workflows/schedule.yml"
   workflow_dispatch:
 permissions:
   contents: write
