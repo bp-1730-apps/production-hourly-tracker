@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Hourly Tracker</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#16263a">
+<meta name="theme-color" content="#3f5270">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Hourly Tracker">
@@ -182,8 +182,8 @@ table.shl td{vertical-align:top;text-align:left;padding:6px 8px;min-width:130px}
 
 /* ===== frosted glass skin ===== */
 :root{--glass:rgba(255,255,255,.58);--glass2:rgba(255,255,255,.4);--gb:rgba(255,255,255,.75);--sh:0 8px 30px rgba(31,55,96,.10),0 1px 2px rgba(31,55,96,.06);--r:16px;--ease:cubic-bezier(.22,.8,.3,1)}
-html{background:#e9eef7}
-body{background:radial-gradient(900px 600px at 8% -5%,#cfe0fa 0,transparent 60%),radial-gradient(800px 600px at 100% 10%,#e1d7f7 0,transparent 55%),radial-gradient(900px 700px at 50% 110%,#cdeee6 0,transparent 60%),#eaf0f8;background-attachment:fixed;min-height:100vh;-webkit-tap-highlight-color:transparent}
+html{background:radial-gradient(900px 600px at 8% -5%,#cfe0fa 0,transparent 60%),radial-gradient(800px 600px at 100% 10%,#e1d7f7 0,transparent 55%),radial-gradient(900px 700px at 50% 110%,#cdeee6 0,transparent 60%),#eaf0f8;background-color:#eaf0f8}
+body{background:transparent;background-attachment:fixed;min-height:100vh;-webkit-tap-highlight-color:transparent}
 .top{background:rgba(22,38,58,.72);-webkit-backdrop-filter:blur(18px) saturate(170%);backdrop-filter:blur(18px) saturate(170%);border-bottom:1px solid rgba(255,255,255,.12);box-shadow:0 4px 24px rgba(15,30,55,.18)}
 #panel{background:var(--glass);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid var(--gb);border-radius:var(--r);margin:10px 14px 0;box-shadow:var(--sh);animation:pop .25s var(--ease)}
 .tabs{padding:12px 14px 10px;gap:8px;scrollbar-width:none}.tabs::-webkit-scrollbar{display:none}
@@ -321,9 +321,9 @@ table.pw td{font-size:11px;padding:4px 3px;min-width:44px}table.pw th{font-size:
 
 /* ===== iPhone Duo / notch / foldable: safe areas and fold-aware widths ===== */
 .top{padding-top:calc(8px + env(safe-area-inset-top));padding-left:calc(14px + env(safe-area-inset-left));padding-right:calc(14px + env(safe-area-inset-right))}
-.tabs,#panel{margin-left:env(safe-area-inset-left);margin-right:env(safe-area-inset-right)}
-.main{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
-@media(min-width:701px){.main{padding-left:max(0px,env(safe-area-inset-left));padding-right:max(0px,env(safe-area-inset-right))}}
+
+.main{padding-left:10px;padding-right:10px}
+@media(min-width:701px){.main{padding-left:0;padding-right:0}}
 .foot{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
 #toast{bottom:calc(22px + env(safe-area-inset-bottom))}
 .jump{top:calc(50px + env(safe-area-inset-top))}
