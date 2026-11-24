@@ -252,6 +252,30 @@ html{scroll-behavior:auto;overscroll-behavior-y:none}
 button,.tab,.chip,.tlc,.seg button{touch-action:manipulation;-webkit-user-select:none;user-select:none}
 input,select{font-size:16px}
 .top{will-change:transform}
+
+/* ===== schedule page ===== */
+.sl{margin:0 0 14px;padding:0;overflow:hidden;scroll-margin-top:90px}
+.slh{display:flex;gap:10px;align-items:center;flex-wrap:wrap;padding:12px 16px}
+.sln{font-size:20px;color:var(--ink)}.slr{margin-left:auto;font-size:13px;color:var(--muted)}.slr b{color:var(--ink)}
+.sr{display:grid;grid-template-columns:128px minmax(210px,1fr) 74px 74px 150px 112px 66px 38px;gap:10px;align-items:center;padding:10px 16px;border-top:1px solid rgba(200,212,230,.55);transition:background .25s}
+.sr.cur{background:rgba(255,244,204,.55)}.sr.fin .sp{opacity:.65}.sr.ov-on{background:rgba(255,248,225,.5)}
+.sr small,.sh small{display:block;font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.03em}
+.stm{font-weight:700;color:var(--ink);font-size:13px}.stm small{font-weight:400;font-size:11px;letter-spacing:0}
+.sp{min-width:0;font-size:14px}.sn{text-align:right;font-weight:700}.sa{text-align:right;font-size:13px}.sd{display:flex;align-items:center;gap:6px;font-size:13px;white-space:nowrap}.sd input{width:20px;height:20px}
+.si .mcin{width:100%}
+.cbar.thin{height:5px;margin-top:6px}
+.sx{width:34px;height:34px;border-radius:50%;border:1px solid var(--gb);background:rgba(255,255,255,.7);font-size:15px;color:var(--ink);transition:transform .25s var(--ease),background .2s}.sx.on{transform:rotate(180deg);background:#fff}
+.shw{background:rgba(240,244,250,.6);padding:6px 16px 12px 16px;border-top:1px dashed rgba(160,176,200,.6)}
+.sh{display:grid;grid-template-columns:120px repeat(3,70px) 100px 112px minmax(140px,1fr);gap:10px;align-items:center;padding:6px 0;border-top:1px solid rgba(200,212,230,.4)}.sh:first-of-type{border-top:0}
+.sh.cur{background:rgba(255,244,204,.5);border-radius:8px}.sh .hh{font-weight:700;color:var(--ink);font-size:13px}.sh .act{width:100%}
+.slf{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 16px;border-top:1px solid rgba(200,212,230,.55);background:rgba(255,255,255,.35)}
+@media(max-width:860px){
+ .sr{grid-template-columns:1fr 1fr 1fr 40px;gap:8px 10px;padding:12px}
+ .stm{grid-column:1/4}.sx{grid-column:4;grid-row:1;justify-self:end}.sp{grid-column:1/5}
+ .sr>.sn{text-align:left}.si{grid-column:1/3}.sa{grid-column:3/5;text-align:right}.sd{grid-column:1/5}
+ .sh{grid-template-columns:1fr 1fr 1fr;gap:6px 10px}.sh .hh,.sh .si,.sh .sno{grid-column:1/4}.sh .sn{text-align:left}
+ .slr{margin-left:0;width:100%}
+}
 </style>
 </head>
 <body>
@@ -916,14 +940,18 @@ function tabDot(l,date,t){
 }
 
 // ---------- Demand: cases the weekly schedules call for, per product per week
-var DM={sec:"ov",line:"ALL",wks:13,sort:"vol",q:""};
+var DM={sec:"ov",line:"ALL",wks:13,sort:"vol",q:"",pk:""};
 function demandData(){
-  var wk={},prod={},curMon=mondayOf(opDay()),dates=allDates().slice().sort();
+  var wk={},prod={},W={},curMon=mondayOf(opDay()),dates=allDates().slice().sort();
   dates.forEach(function(d){var mon=mondayOf(d);
-    TRACKED.forEach(function(l){if(DM.line!=="ALL"&&l!==DM.line)return;
-      allRunsOf(l,d).forEach(function(r){if(!(r.need>0))return;
-        var k=k6(r.item)||String(r.item),P=prod[k]=prod[k]||{k:k,name:r.name||"",w:{}};
-        if(r.name)P.name=r.name;P.w[mon]=(P.w[mon]||0)+r.need;wk[mon]=(wk[mon]||0)+r.need})})});
+    TRACKED.forEach(function(l){
+      var rs=allRunsOf(l,d).filter(function(r){return r.need>0});if(!rs.length)return;
+      var c=(W[mon]=W[mon]||{})[l]=(W[mon]||{})[l]||{runs:0,co:0,hrs:0,cases:0,ld:0};     // every line, whatever the line filter: capacity and changeovers need them all
+      c.ld++;c.runs+=rs.length;c.co+=rs.length-1;rs.forEach(function(r){c.hrs+=runHrs(r);c.cases+=r.need});
+      if(DM.line!=="ALL"&&l!==DM.line)return;
+      rs.forEach(function(r){
+        var k=k6(r.item)||String(r.item),P=prod[k]=prod[k]||{k:k,name:r.name||"",w:{},rn:{},hr:{},ln:{}};
+        if(r.name)P.name=r.name;P.w[mon]=(P.w[mon]||0)+r.need;P.rn[mon]=(P.rn[mon]||0)+1;P.hr[mon]=(P.hr[mon]||0)+runHrs(r);P.ln[l]=(P.ln[l]||0)+r.need;wk[mon]=(wk[mon]||0)+r.need})})});
   var mons=Object.keys(wk).sort();if(!mons.length)return {weeks:[],prod:[],tot:null};
   var weeks=[],m=mons[0];while(m<=mons[mons.length-1]){weeks.push(m);m=addDays(m,7)}
   var all=weeks.slice(),n=DM.wks;weeks=weeks.slice(-n);
@@ -938,7 +966,14 @@ function demandData(){
     o.pct=(ra-pa)/pa;o.st=o.pct>=.10?"up":o.pct<=-.10?"down":"flat";return o;
   }
   var list=Object.keys(prod).map(function(k){var P=prod[k];P.t=trend(function(x){return P.w[x]||0});P.tot=weeks.reduce(function(s,x){return s+(P.w[x]||0)},0);return P}).filter(function(P){return P.tot>0||P.t.ra>0||P.t.pa>0});
-  return {weeks:weeks,all:all,cw:cw,miss:miss,curMon:curMon,wk:wk,prod:list,tot:trend(function(x){return wk[x]||0})};
+  var cwin=weeks.filter(function(x){return cw.indexOf(x)>=0}),rec=fw.slice(-4).filter(function(x){return wk[x]>0}),pri=fw.slice(-8,-4).filter(function(x){return wk[x]>0});
+  var tc=cwin.reduce(function(s,x){return s+(wk[x]||0)},0),tr=rec.reduce(function(s,x){return s+(wk[x]||0)},0),tp=pri.reduce(function(s,x){return s+(wk[x]||0)},0);
+  list.forEach(function(P){var v=cwin.map(function(x){return P.w[x]||0}),n=v.length||1,mean=v.reduce(function(a,b){return a+b},0)/n,sd=Math.sqrt(v.reduce(function(a,b){return a+(b-mean)*(b-mean)},0)/n);
+    P.cases=v.reduce(function(a,b){return a+b},0);P.act=v.filter(function(x){return x>0}).length;P.n=v.length;P.cv=mean>0?sd/mean:null;
+    P.sr=tr>0?rec.reduce(function(s,x){return s+(P.w[x]||0)},0)/tr:0;P.sp=tp>0?pri.reduce(function(s,x){return s+(P.w[x]||0)},0)/tp:0;
+    P.steady=P.n<4||P.cv==null?"na":P.act<P.n*.5?"inter":P.cv<.25?"steady":P.cv<.6?"var":"erratic"});
+  list.sort(function(a,b){return b.t.ra-a.t.ra});
+  return {weeks:weeks,all:all,cw:cw,cwin:cwin,rec:rec,pri:pri,miss:miss,curMon:curMon,wk:wk,W:W,prod:list,tc:tc,trend:trend,tot:trend(function(x){return wk[x]||0})};
 }
 function dmChip(t){
   var m={up:["c-ok","Increasing"],down:["c-bad","Decreasing"],flat:["c-mut","Steady"],"new":["c-warn","New"],na:["c-none","Not enough weeks"]}[t.st];
@@ -949,24 +984,93 @@ function dmSpark(vals){
   var W=110,H=26,mx=Math.max.apply(null,vals.concat([1])),p=vals.map(function(v,i){return (vals.length<2?0:i*(W-4)/(vals.length-1)+2).toFixed(1)+","+(H-3-(v/mx)*(H-6)).toFixed(1)});
   return '<svg width="'+W+'" height="'+H+'" viewBox="0 0 '+W+' '+H+'" style="vertical-align:middle"><polyline fill="none" stroke="#2f6fb0" stroke-width="1.8" stroke-linejoin="round" points="'+p.join(" ")+'"/><circle cx="'+p[p.length-1].split(",")[0]+'" cy="'+p[p.length-1].split(",")[1]+'" r="2.4" fill="#2f6fb0"/></svg>';
 }
-function dmChart(D){
-  var W=760,H=230,L=52,B=28,T=12,R=10,ws=D.weeks,n=ws.length,mx=Math.max.apply(null,ws.map(function(x){return D.wk[x]||0}).concat([1])),
-  step=Math.pow(10,Math.floor(Math.log10(mx))),top=Math.ceil(mx/step)*step,bw=(W-L-R)/n,s='';
-  for(var g=0;g<=4;g++){var v=top*g/4,y=H-B-(H-B-T)*g/4;s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" stroke="#dde3ec"/><text x="'+(L-6)+'" y="'+(y+4)+'" font-size="11" text-anchor="end" fill="#6a7889">'+fmt(rnd(v))+'</text>'}
-  var ma=[];
-  ws.forEach(function(x,i){var v=D.wk[x]||0,part=x>=D.curMon,h=(H-B-T)*v/top,xx=L+i*bw;
-    s+='<rect x="'+(xx+bw*.12).toFixed(1)+'" y="'+(H-B-h).toFixed(1)+'" width="'+(bw*.76).toFixed(1)+'" height="'+h.toFixed(1)+'" rx="4" fill="#2f6fb0" opacity="'+(part?.3:.75)+'"'+(part?' stroke="#2f6fb0" stroke-dasharray="3 3"':'')+'><title>Week of '+pretty(x)+': '+fmt(rnd(v))+' cases'+(part?' (week not finished)':'')+'</title></rect>';
+function dmBars(D,ws,getv,o){
+  o=o||{};var W=760,H=230,L=54,B=28,T=12,R=10,n=ws.length,vals=ws.map(getv),mx=Math.max.apply(null,vals.concat([o.ref||0,1])),
+  step=Math.pow(10,Math.floor(Math.log10(mx))),top=Math.ceil(mx/step)*step,bw=(W-L-R)/n,s='',fy=o.fy||function(v){return fmt(rnd(v))},Y=function(v){return H-B-(H-B-T)*v/top};
+  for(var g=0;g<=4;g++){var y=Y(top*g/4);s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+y+'" y2="'+y+'" stroke="#dde3ec"/><text x="'+(L-6)+'" y="'+(y+4)+'" font-size="11" text-anchor="end" fill="#6a7889">'+fy(top*g/4)+'</text>'}
+  var ma=[],have=o.has||function(x){return D.wk[x]>0};
+  ws.forEach(function(x,i){var v=vals[i],part=x>=D.curMon,ok=have(x),xx=L+i*bw;
+    if(ok||part){s+='<rect x="'+(xx+bw*.12).toFixed(1)+'" y="'+Y(v).toFixed(1)+'" width="'+(bw*.76).toFixed(1)+'" height="'+Math.max(0,H-B-Y(v)).toFixed(1)+'" rx="4" fill="'+(o.col||"#2f6fb0")+'" opacity="'+(part?.3:.75)+'"'+(part?' stroke="'+(o.col||"#2f6fb0")+'" stroke-dasharray="3 3"':'')+'><title>Week of '+pretty(x)+': '+(o.tip?o.tip(x,v):fy(v))+(part?' (week not finished)':'')+'</title></rect>'}
     if(n<=16||i%Math.ceil(n/12)===0)s+='<text x="'+(xx+bw/2).toFixed(1)+'" y="'+(H-8)+'" font-size="10" text-anchor="middle" fill="#6a7889">'+pretty(x).slice(0,5)+'</text>';
-    if(!part&&v>0){var k=D.cw.indexOf(x),a=D.cw.slice(Math.max(0,k-3),k+1);ma.push((xx+bw/2).toFixed(1)+","+(H-B-(H-B-T)*(a.reduce(function(t,q){return t+(D.wk[q]||0)},0)/a.length)/top).toFixed(1))}});
+    if(!part&&ok){var a=[],k=i;while(k>=0&&a.length<4){if(have(ws[k])&&ws[k]<D.curMon)a.push(ws[k]);k--}
+      var mv=o.ma?o.ma(a):a.reduce(function(t,q){return t+getv(q)},0)/a.length;ma.push((xx+bw/2).toFixed(1)+","+Y(mv).toFixed(1))}});
+  if(o.ref)s+='<line x1="'+L+'" x2="'+(W-R)+'" y1="'+Y(o.ref)+'" y2="'+Y(o.ref)+'" stroke="#d9423a" stroke-width="2" stroke-dasharray="6 4"/><text x="'+(W-R)+'" y="'+(Y(o.ref)-5)+'" font-size="11" text-anchor="end" fill="#b3261e">'+esc(o.refLabel||"limit")+'</text>';
   if(ma.length>1)s+='<polyline fill="none" stroke="#e0a100" stroke-width="2.5" stroke-linejoin="round" points="'+ma.join(" ")+'"/>';
-  return '<div class="card tw" style="padding:10px"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:560px;height:auto">'+s+'</svg><div class="sub" style="padding:2px 6px">Bars = cases demanded that week (faded dashed bar = current week, not finished). Gold line = 4-week moving average.</div></div>';
+  return '<div class="card tw" style="padding:10px"><svg viewBox="0 0 '+W+' '+H+'" style="width:100%;min-width:560px;height:auto">'+s+'</svg><div class="sub" style="padding:2px 6px">'+(o.note||'Bars = one week each (faded dashed bar = current week, not finished). Gold line = 4-week moving average.')+'</div></div>';
+}
+function dmChart(D){return dmBars(D,D.weeks,function(x){return D.wk[x]||0})}
+
+function dmSum(D,mon){var q=D.W[mon]||{},o={runs:0,co:0,hrs:0,cases:0,ld:0};TRACKED.forEach(function(l){if(DM.line!=="ALL"&&l!==DM.line)return;var c=q[l];if(c){o.runs+=c.runs;o.co+=c.co;o.hrs+=c.hrs;o.cases+=c.cases;o.ld+=c.ld}});return o}
+function dmKp(lab,val,sub){return '<div class="kp"><span class="lab">'+lab+'</span><b>'+val+'</b><span class="sub">'+sub+'</span></div>'}
+function dmAvg(list,f){return list.length?list.reduce(function(s,x){return s+f(x)},0)/list.length:0}
+function dmChg(a,b,pts,inv){   // chip for a change; inv = a rise is bad
+  var d=a-b,th=pts?2:.1*Math.abs(b),flat=Math.abs(d)<(pts?th:Math.max(th,1e-9)),up=d>0,good=flat?null:(inv?!up:up);
+  return {d:d,flat:flat,cls:flat?'c-mut':(good?'c-ok':'c-bad')};
+}
+var STEADY={steady:["c-ok","Steady"],"var":["c-warn","Variable"],erratic:["c-bad","Erratic"],inter:["c-mut","Intermittent"],na:["c-none","Too new"]};
+function dmSteady(P){var m=STEADY[P.steady];return '<span class="pl '+m[0]+'" title="week-to-week swing (stdev / average) '+(P.cv==null?'-':(P.cv*100).toFixed(0)+'%')+'">'+m[1]+(P.cv!=null&&P.steady!=="inter"&&P.steady!=="na"?' '+(P.cv*100).toFixed(0)+'%':'')+'</span>'}
+function dmMix(D){
+  var rows=D.prod.filter(function(P){return P.cases>0}).sort(function(a,b){return b.cases-a.cases}),cum=0,aN=0,top10=0;
+  rows.forEach(function(P,i){var sh=D.tc>0?P.cases/D.tc:0;P.sh=sh;cum+=sh;P.cum=cum;P.abc=cum-sh<.8?"A":(cum-sh<.95?"B":"C");if(P.abc==="A")aN++;if(i<10)top10+=sh});
+  var h='<div class="kps">'+dmKp('PRODUCTS',fmt(rows.length),'with demand in the '+D.cwin.length+' finished weeks')+dmKp('MAKE 80% OF CASES',fmt(aN),'products (class A) = '+(rows.length?Math.round(100*aN/rows.length):0)+'% of the list')+dmKp('TOP 10 SHARE',(top10*100).toFixed(0)+'%','of all cases')+dmKp('BIGGEST PRODUCT',rows.length?(rows[0].sh*100).toFixed(0)+'%':'-',rows.length?esc(rows[0].k):'')+'</div>';
+  var nw=D.prod.filter(function(P){return P.t.st==="new"}).sort(function(a,b){return b.t.ra-a.t.ra}).slice(0,8),sp=D.prod.filter(function(P){return P.t.st==="down"&&P.t.ra<=0&&P.t.pa>0}).sort(function(a,b){return b.t.pa-a.t.pa}).slice(0,8);
+  function lst(a,t,f){return '<div class="card" style="padding:12px 14px;flex:1;min-width:260px"><b>'+t+'</b>'+(a.length?a.map(function(P){return '<div style="display:flex;gap:8px;justify-content:space-between;padding:5px 0;border-top:1px solid var(--line);margin-top:5px" data-dmp="'+esc(P.k)+'"><span>'+esc(P.k)+' <span class="sub">'+esc(P.name.slice(0,28))+'</span></span><b style="white-space:nowrap">'+fmt(rnd(f(P)))+'<span class="sub"> /wk</span></b></div>'}).join(""):'<div class="sub">None</div>')+'</div>'}
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px">'+lst(nw,'New products (not in the 4 weeks before)',function(P){return P.t.ra})+lst(sp,'Stopped (ran before, nothing in the last 4 weeks)',function(P){return P.t.pa})+'</div>';
+  h+='<div class="card tw"><table class="hr" style="margin:0"><thead><tr><th>#</th><th>PRODUCT</th><th class="c">CASES</th><th>SHARE</th><th class="c">CUMULATIVE</th><th class="c">CLASS</th><th class="c">SHARE CHANGE</th><th>STEADINESS</th></tr></thead><tbody>';
+  rows.slice(0,60).forEach(function(P,i){var dp=(P.sr-P.sp)*100;h+='<tr class="lg" data-dmp="'+esc(P.k)+'"><td>'+(i+1)+'</td><td class="pr"><b>'+esc(P.k)+'</b> <span>'+esc(P.name)+'</span></td><td style="text-align:center">'+fmt(rnd(P.cases))+'</td><td style="min-width:120px"><div class="cbar"><i style="width:'+Math.min(100,P.sh*100*3).toFixed(0)+'%;background:var(--accent)"></i></div><span class="sub">'+(P.sh*100).toFixed(1)+'%</span></td><td style="text-align:center">'+(P.cum*100).toFixed(0)+'%</td><td style="text-align:center"><span class="pl '+(P.abc==="A"?'c-ok':P.abc==="B"?'c-warn':'c-mut')+'">'+P.abc+'</span></td><td style="text-align:center;color:'+(Math.abs(dp)<.05?'inherit':dp>0?'var(--okfg)':'var(--badfg)')+'">'+(Math.abs(dp)<.05?'&ndash;':(dp>0?'+':'')+dp.toFixed(1)+' pts')+'</td><td>'+dmSteady(P)+'</td></tr>'});
+  h+='</tbody></table></div><div class="hint">Class A = the products that together make the first 80% of cases, B = the next 15%, C = the last 5%. Share change = share of all cases in the last 4 weeks minus the 4 weeks before (percentage points). Steadiness = how much the weekly cases swing (standard deviation / average) over the finished weeks: under 25% steady, 25-60% variable, over 60% erratic. Intermittent = ran in under half the weeks. Tap a row for its detail.</div>';
+  return h;
+}
+function dmCap(D){
+  var av=capH()*5,ls=DM.line==="ALL"?TRACKED:[DM.line],ws=D.weeks,hrsOf=function(x){return dmSum(D,x).hrs},ref=av*ls.length;
+  var rec=D.rec,pri=D.pri,ra=dmAvg(rec,hrsOf),pa=dmAvg(pri,hrsOf),u=function(v){return 100*v/ref},ch=dmChg(ra,pa,false,true);
+  var h='<div class="kps">'+dmKp('LAST FULL WEEK',fmt(rnd(D.cw.length?hrsOf(D.cw[D.cw.length-1]):0))+' h','of '+fmt(rnd(ref))+' h available')+dmKp('LAST 4 WEEKS',u(ra).toFixed(0)+'%','average load ('+fmt(rnd(ra))+' h a week)')+dmKp('4 WEEKS BEFORE',u(pa).toFixed(0)+'%','average load')+dmKp('CHANGE',(u(ra)-u(pa)>=0?'+':'')+(u(ra)-u(pa)).toFixed(1)+' pts','in load, '+(ra-pa>=0?'+':'')+fmt(rnd(ra-pa))+' h a week')+'</div>';
+  h+=dmBars(D,ws,hrsOf,{fy:function(v){return fmt(rnd(v))+' h'},ref:ref,refLabel:'available '+fmt(rnd(ref))+' h',col:"#7b6fd0",note:'Bars = line hours the schedule calls for that week ('+(DM.line==="ALL"?'all lines':DM.line)+'). Red dashed line = hours available ('+capH()+' h x 5 days x '+ls.length+' line'+(ls.length>1?'s':'')+'). Gold = 4-week average.',tip:function(x,v){return fmt(rnd(v))+' h ('+u(v).toFixed(0)+'% of available)'}});
+  var st=function(x){return x>=100?['c-bad','Over capacity']:x>=90?['c-warn','Tight']:['c-ok','Room']};
+  h+='<div class="card tw" style="margin-top:10px"><table class="hr" style="margin:0"><thead><tr><th>LINE</th><th class="c">LAST 4-WK HOURS / WK</th><th class="c">LOAD</th><th class="c">PRIOR 4-WK LOAD</th><th class="c">CHANGE</th><th>STATUS</th></tr></thead><tbody>';
+  ls.forEach(function(l){var f=function(x){return ((D.W[x]||{})[l]||{hrs:0}).hrs},a=dmAvg(rec,f),b=dmAvg(pri,f),sx=st(100*a/av);
+    h+='<tr><td><b>'+l+'</b></td><td style="text-align:center">'+fmt(rnd(a))+' h</td><td style="text-align:center"><b>'+(100*a/av).toFixed(0)+'%</b></td><td style="text-align:center">'+(100*b/av).toFixed(0)+'%</td><td style="text-align:center">'+(100*(a-b)/av>=0?'+':'')+(100*(a-b)/av).toFixed(1)+' pts</td><td><span class="pl '+sx[0]+'">'+sx[1]+'</span></td></tr>'});
+  h+='</tbody></table></div>';
+  var wl=ws.slice().reverse().filter(function(x){return D.W[x]});
+  h+='<details class="hu" style="margin-top:10px"><summary>Load by week and line</summary><div class="card tw" style="margin-top:8px"><table class="ov"><tr><th>WEEK OF</th>'+ls.map(function(l){return '<th>'+l+'</th>'}).join('')+'</tr>'+wl.map(function(x){return '<tr><td class="ln" style="font-size:13px">'+pretty(x).slice(0,5)+(x>=D.curMon?' <span class="sub">(partial)</span>':'')+'</td>'+ls.map(function(l){var c=(D.W[x]||{})[l];if(!c)return '<td class="c-none">&ndash;</td>';var p=100*c.hrs/av;return '<td class="'+(p>=100?'c-bad':p>=90?'c-warn':'c-ok')+'"><b style="display:inline">'+p.toFixed(0)+'%</b></td>'}).join('')+'</tr>'}).join('')+'</table></div></details>';
+  var hp=D.prod.map(function(P){return {P:P,h:dmAvg(rec,function(x){return P.hr[x]||0})}}).filter(function(x){return x.h>0}).sort(function(a,b){return b.h-a.h}).slice(0,10),th=rec.length?dmAvg(rec,hrsOf):0;
+  h+='<h3 class="gh">Products that use the most line time</h3><div class="card tw"><table class="hr" style="margin:0"><thead><tr><th>PRODUCT</th><th class="c">HOURS / WK</th><th class="c">SHARE OF HOURS</th><th class="c">HOURS PER 1,000 CASES</th><th class="c">CASES / WK</th></tr></thead><tbody>'+hp.map(function(x){var P=x.P,cs=dmAvg(rec,function(q){return P.w[q]||0});return '<tr class="lg" data-dmp="'+esc(P.k)+'"><td class="pr"><b>'+esc(P.k)+'</b> <span>'+esc(P.name)+'</span></td><td style="text-align:center">'+x.h.toFixed(1)+'</td><td style="text-align:center">'+(th>0?(100*x.h/th).toFixed(0):0)+'%</td><td style="text-align:center">'+(cs>0?(1000*x.h/cs).toFixed(1):'&ndash;')+'</td><td style="text-align:center">'+fmt(rnd(cs))+'</td></tr>'}).join('')+'</tbody></table></div>';
+  h+='<div class="hint">Hours = each run\'s scheduled hours (total hours, or cases / standard rate). Available = the CAPACITY setting (gear panel) x 5 days a week per line, so load over 100% means the schedule asks for more hours than a normal 5-day week has. Tight = 90% or more. Last 4 weeks = the 4 weeks that ended before this one; weeks without a saved schedule are skipped.</div>';
+  return h;
+}
+function dmCo(D){
+  var ws=D.weeks,sm=function(x){return dmSum(D,x)},pc=function(x){var s=sm(x);return s.runs>0?100*s.co/s.runs:0},
+  ratio=function(a){var r=0,c=0;a.forEach(function(x){var s=sm(x);r+=s.runs;c+=s.co});return r>0?100*c/r:0},
+  rr=ratio(D.rec),pp=ratio(D.pri),lw=D.cw.length?pc(D.cw[D.cw.length-1]):0,d=rr-pp,flat=Math.abs(d)<2,lab=flat?'Steady':d>0?'More changeovers':'Fewer changeovers';
+  var h='<div class="kps">'+dmKp('LAST FULL WEEK',lw.toFixed(1)+'%','of runs needed a changeover')+dmKp('LAST 4 WEEKS',rr.toFixed(1)+'%','changeovers / runs')+dmKp('4 WEEKS BEFORE',pp.toFixed(1)+'%','changeovers / runs')+dmKp('CHANGE',(d>=0?'+':'')+d.toFixed(1)+' pts',lab)+'</div>';
+  h+=dmBars(D,ws,pc,{fy:function(v){return v.toFixed(0)+'%'},col:"#d9892f",ma:ratio,tip:function(x,v){var s=sm(x);return v.toFixed(1)+'% ('+s.co+' changeovers in '+s.runs+' runs)'},note:'Bars = changeover % each week ('+(DM.line==="ALL"?'all lines':DM.line)+'). Gold = 4-week rate (changeovers / runs over those weeks). Lower is better: more of the day spent running, less switching.'});
+  h+='<div class="card tw" style="margin-top:10px"><table class="ov"><tr><th>WEEK OF</th><th>RUNS</th><th>CHANGEOVERS</th><th>CHANGEOVER %</th><th>CASES / RUN</th><th>CASES / CHANGEOVER</th>'+TRACKED.map(function(l){return '<th>'+l+' %</th>'}).join('')+'</tr>';
+  ws.slice().reverse().forEach(function(x){var s=sm(x);if(!s.runs)return;
+    h+='<tr><td class="ln" style="font-size:13px">'+pretty(x).slice(0,5)+(x>=D.curMon?' <span class="sub">(partial)</span>':'')+'</td><td>'+fmt(s.runs)+'</td><td>'+fmt(s.co)+'</td><td><b style="display:inline">'+(100*s.co/s.runs).toFixed(1)+'%</b></td><td>'+fmt(rnd(s.cases/s.runs))+'</td><td>'+(s.co>0?fmt(rnd(s.cases/s.co)):'&ndash;')+'</td>'+TRACKED.map(function(l){var c=(D.W[x]||{})[l];return c&&c.runs?'<td>'+(100*c.co/c.runs).toFixed(0)+'%</td>':'<td class="c-none">&ndash;</td>'}).join('')+'</tr>'});
+  h+='</table></div><div class="hint">A changeover is every run after the first run of a line each day (runs minus days run). Changeover % = changeovers / runs for the week, so 50% means every other run followed a different product. Cases per changeover shows how much is made between product switches: bigger is better. The line columns always show every line.</div>';
+  return h;
+}
+function dmDetail(D){
+  var rows=D.prod.filter(function(P){return P.tot>0||P.t.ra>0}).sort(function(a,b){return b.cases-a.cases||b.t.ra-a.t.ra});
+  if(!rows.length)return '<div class="card note-card">No products in this range.</div>';
+  var P=rows.filter(function(x){return x.k===DM.pk})[0]||rows[0];DM.pk=P.k;
+  var h='<div class="card tools"><label>PRODUCT</label><select id="dmProd" style="max-width:100%">'+rows.slice(0,300).map(function(x){return '<option value="'+esc(x.k)+'"'+(x.k===P.k?' selected':'')+'>'+esc(x.k)+' '+esc(x.name.slice(0,40))+'</option>'}).join('')+'</select></div>';
+  var runsW=D.cwin.reduce(function(s,x){return s+(P.rn[x]||0)},0),cases=P.cases,hrsT=D.cwin.reduce(function(s,x){return s+(P.hr[x]||0)},0),rn=D.rec.length?dmAvg(D.rec,function(x){return P.rn[x]||0}):0,hw=D.rec.length?dmAvg(D.rec,function(x){return P.hr[x]||0}):0;
+  h+='<div class="kps">'+dmKp('LAST 4 WEEKS',fmt(rnd(P.t.ra)),'cases a week ('+dmPct(P.t).replace('&ndash;','n/a')+' vs before)')+dmKp('SHARE OF CASES',(P.sh!=null?P.sh*100:(D.tc>0?100*P.cases/D.tc:0)).toFixed(1)+'%','of all cases, finished weeks')+dmKp('RUNS A WEEK',rn.toFixed(1),runsW?'avg run '+fmt(rnd(cases/runsW))+' cases':'')+dmKp('LINE HOURS A WEEK',hw.toFixed(1),hrsT>0&&cases>0?(1000*hrsT/cases).toFixed(1)+' h per 1,000 cases':'')+'</div>';
+  h+='<div class="card note-card" style="margin-bottom:10px"><b>'+esc(P.name)+'</b> &middot; '+dmChip(P.t)+' &nbsp; '+dmSteady(P)+'</div>';
+  h+=dmBars(D,D.weeks,function(x){return P.w[x]||0},{note:'Bars = cases of this product scheduled each week. Weeks without any run show as zero. Gold = 4-week average.',tip:function(x,v){return fmt(rnd(v))+' cases in '+(P.rn[x]||0)+' run(s)'}});
+  var lt=Object.keys(P.ln).reduce(function(s,l){return s+P.ln[l]},0);
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:10px"><div class="card tw" style="flex:2;min-width:300px"><table class="hr" style="margin:0"><thead><tr><th>WEEK OF</th><th class="c">CASES</th><th class="c">RUNS</th><th class="c">CASES / RUN</th><th class="c">HOURS</th></tr></thead><tbody>'+D.weeks.slice().reverse().filter(function(x){return P.w[x]}).slice(0,16).map(function(x){return '<tr><td>'+pretty(x).slice(0,5)+(x>=D.curMon?' <span class="sub">(partial)</span>':'')+'</td><td style="text-align:center">'+fmt(rnd(P.w[x]))+'</td><td style="text-align:center">'+(P.rn[x]||0)+'</td><td style="text-align:center">'+fmt(rnd(P.w[x]/Math.max(1,P.rn[x]||1)))+'</td><td style="text-align:center">'+(P.hr[x]||0).toFixed(1)+'</td></tr>'}).join('')+'</tbody></table></div>'+
+    '<div class="card tw" style="flex:1;min-width:220px"><table class="hr" style="margin:0"><thead><tr><th>LINE</th><th class="c">CASES</th><th class="c">SHARE</th></tr></thead><tbody>'+Object.keys(P.ln).sort(function(a,b){return P.ln[b]-P.ln[a]}).map(function(l){return '<tr><td><b>'+l+'</b></td><td style="text-align:center">'+fmt(rnd(P.ln[l]))+'</td><td style="text-align:center">'+(lt>0?(100*P.ln[l]/lt).toFixed(0):0)+'%</td></tr>'}).join('')+'</tbody></table></div></div>';
+  h+='<div class="hint">Lines = where this product ran in the weeks loaded. Steadiness and trend use finished weeks only.</div>';
+  return h;
 }
 function buildDemand(){
   var h='<h2>Demand by week</h2><div class="sub" style="margin-bottom:8px">Demand = cases the weekly schedules call for (cases required, summed over every run), Monday to Sunday. It is what was planned to be made, not shipped orders. The current week is not finished, so it is left out of the trend.</div>';
   var D=demandData();
   if(!D.weeks.length)return h+'<div class="card note-card">No schedule history loaded yet. Open Trends once or wait a moment for the history to load.</div>';
   h+='<div class="card tools"><label>LINE</label><select id="dmLine"><option value="ALL">All lines</option>'+TRACKED.map(function(l){return '<option'+(DM.line===l?' selected':'')+'>'+l+'</option>'}).join("")+'</select><label>WEEKS</label><select id="dmWks">'+[8,13,26,52].map(function(n){return '<option value="'+n+'"'+(DM.wks===n?' selected':'')+'>'+n+' weeks</option>'}).join("")+'</select></div>';
-  h+=segNav([["ov","Overview"],["pr","By product"],["gr","Weekly grid"]],DM.sec,"dmsec");
+  h+=segNav([["ov","Overview"],["pr","By product"],["mix","Mix &amp; steadiness"],["cap","Capacity hours"],["co","Changeovers"],["pd","Product detail"],["gr","Weekly grid"]],DM.sec,"dmsec");
   var T=D.tot,arrow=T.st==="up"?"&#9650;":T.st==="down"?"&#9660;":"&#9644;";
   h+='\u0001ov\u0001<div class="kps"><div class="kp"><span class="lab">LAST FULL WEEK</span><b>'+fmt(rnd(T.last))+'</b><span class="sub">cases, week of '+(D.cw.length?pretty(D.cw[D.cw.length-1]).slice(0,5):'-')+'</span></div><div class="kp"><span class="lab">LAST 4 WEEKS</span><b>'+fmt(rnd(T.ra))+'</b><span class="sub">cases per week, average</span></div><div class="kp"><span class="lab">4 WEEKS BEFORE THAT</span><b>'+fmt(rnd(T.pa))+'</b><span class="sub">cases per week, average</span></div><div class="kp"><span class="lab">CHANGE</span><b>'+arrow+' '+dmPct(T)+'</b><span class="sub">'+(T.d>=0?"+":"")+fmt(rnd(T.d))+' cases per week</span></div></div>';
   h+='<div class="card note-card" style="margin-bottom:10px"><b>'+(T.st==="up"?"Demand is increasing":T.st==="down"?"Demand is decreasing":T.st==="flat"?"Demand is steady":"Not enough finished weeks yet")+'</b>'+(T.st==="na"?'':' &mdash; '+(DM.line==="ALL"?"all lines":DM.line)+' averaged '+fmt(rnd(T.ra))+' cases a week over the last 4 finished weeks vs '+fmt(rnd(T.pa))+' in the 4 weeks before. Up or down counts as a change at 10% or more.')+'</div>';
@@ -981,8 +1085,9 @@ function buildDemand(){
   rows.sort(by);var shown=rows.slice(0,80);
   h+='\u0001pr\u0001<div class="card tools"><label>FIND</label><input data-k="dmq" value="'+esc(DM.q)+'" placeholder="item or name"><label>SORT</label><select id="dmSort">'+[["vol","Biggest demand"],["up","Biggest increase"],["down","Biggest decrease"]].map(function(o){return '<option value="'+o[0]+'"'+(DM.sort===o[0]?' selected':'')+'>'+o[1]+'</option>'}).join("")+'</select></div>';
   h+='<div class="card tw"><table class="hr" style="margin:0"><thead><tr><th>PRODUCT</th><th>LAST '+D.weeks.length+' WEEKS</th><th class="c">LAST FULL WEEK</th><th class="c">PRIOR 4-WK AVG</th><th class="c">LAST 4-WK AVG</th><th class="c">CHANGE</th><th>TREND</th></tr></thead><tbody>';
-  shown.forEach(function(P){h+='<tr><td class="pr"><b>'+esc(P.k)+'</b> <span>'+esc(P.name)+'</span></td><td>'+dmSpark(D.weeks.map(function(x){return P.w[x]||0}))+'</td><td style="text-align:center">'+fmt(rnd(P.t.last))+'</td><td style="text-align:center">'+fmt(rnd(P.t.pa))+'</td><td style="text-align:center"><b>'+fmt(rnd(P.t.ra))+'</b></td><td style="text-align:center">'+dmPct(P.t)+'</td><td>'+dmChip(P.t)+'</td></tr>'});
+  shown.forEach(function(P){h+='<tr class="lg" data-dmp="'+esc(P.k)+'"><td class="pr"><b>'+esc(P.k)+'</b> <span>'+esc(P.name)+'</span></td><td>'+dmSpark(D.weeks.map(function(x){return P.w[x]||0}))+'</td><td style="text-align:center">'+fmt(rnd(P.t.last))+'</td><td style="text-align:center">'+fmt(rnd(P.t.pa))+'</td><td style="text-align:center"><b>'+fmt(rnd(P.t.ra))+'</b></td><td style="text-align:center">'+dmPct(P.t)+'</td><td>'+dmChip(P.t)+'</td></tr>'});
   h+='</tbody></table></div><div class="hint">'+(rows.length>shown.length?'Showing the top '+shown.length+' of '+rows.length+' products. Use Find to narrow. ':rows.length+' products. ')+'Averages count weeks the product did not run as 0. Change = (last 4-week average - prior 4-week average) / prior average. Increasing or decreasing means a change of 10% or more.</div>';
+  h+='\u0001mix\u0001'+dmMix(D)+'\u0001cap\u0001'+dmCap(D)+'\u0001co\u0001'+dmCo(D)+'\u0001pd\u0001'+dmDetail(D);
   // grid
   var g=D.prod.slice().sort(function(a,b){return b.tot-a.tot}).slice(0,40);
   h+='\u0001gr\u0001<div class="card tw"><table class="ov"><tr><th>PRODUCT</th>'+D.weeks.map(function(x){return '<th'+(x>=D.curMon?' class="now"':'')+'>'+pretty(x).slice(0,5)+'</th>'}).join("")+'</tr>';
@@ -992,24 +1097,77 @@ function buildDemand(){
   h+='</table></div><div class="hint">Top 40 products by cases in the selected weeks. Blank = not scheduled that week. Darker = more cases for that product.</div>';
   var pk=pickSec(h,DM.sec);return pk.head+pk.body;
 }
-var LAST={t:"",m:""};function sigNow(){return tab+"|"+curDate()+"|"+DM.sec+"|"+FS.sec+"|"+TR.sec+"|"+MC.line}
+
+// ---------- Schedule page: every line, workbook style, counts typed right in the schedule
+var SX={},SLF=null;
+function sxHours(l,d,res,ri,t){
+  var rows='';
+  for(var h=0;h<NH;h++){var q=null;res.hours[h].prods.forEach(function(x){if(x.ri===ri)q=x});if(!q)continue;
+    if(!(q.sch>=0.5||q.act!=null||res.hours[h].hs<=nowRel(d)+60))continue;   // future hours that only carry owed cases are left out
+    var k=akey(d,l,h,ri),manual=k in S.acts,nk=d+"|"+l+"|"+h,cur=(function(){var n=nowRel(d);return n>=res.hours[h].hs&&n<res.hours[h].he})();
+    rows+='<div class="sh'+(cur?' cur':'')+'"><div class="hh">'+hr(res.hours[h].hs)+'-'+hr(res.hours[h].he)+(cur?' <span class="nowp" style="display:inline-block">NOW</span>':'')+'</div>'+
+      '<div class="sn"><small>PLANNED</small>'+(q.sch>=0.5?fmt(rnd(q.sch)):'&ndash;')+'</div><div class="sn"><small>OWED</small>'+(q.back>=0.5?fmt(rnd(q.back)):'&ndash;')+'</div><div class="sn"><small>EXPECTED</small><b>'+fmt(rnd(q.exp))+'</b></div>'+
+      '<div class="sn"><small>L2L (REF)</small>'+(k in AUTO?'<span class="l2lref">'+fmt(rnd(AUTO[k]))+'</span>'+(manual&&Math.round(AUTO[k])===Math.round(S.acts[k])?'':' <button class="lk" data-usel2l="'+k+'">use</button>'):'&ndash;')+'</div>'+
+      '<div class="si"><input class="act'+(manual?'':' auto')+'" inputmode="decimal" placeholder="actual" data-k="'+k+'" data-act="'+k+'" value="'+(q.act==null?"":rnd(q.act))+'"></div>'+
+      '<div class="sno"><input class="note" placeholder="Note (downtime, jam...)" data-note="'+nk+'" value="'+esc(S.notes[nk]||"")+'"></div></div>';
+  }
+  return rows?'<div class="shw"><div class="sub" style="padding:4px 2px 6px">Hour by hour for this product. Typing an hour replaces the run total above for that product.</div>'+rows+'</div>':'<div class="shw sub">This product has no scheduled hours.</div>';
+}
+function buildSchedule(date){
+  var h='<h2>Schedule &middot; '+pretty(date)+' <span class="sub" style="font-weight:400">'+dayname(date)+'</span></h2>';
+  h+='<div class="sub" style="margin-bottom:8px">Type the total cases made so far for each product in the Made box. It replaces L2L for that product until you clear it. Tick Done when the run is finished. Tap a row\'s arrow for its hour-by-hour detail and notes.</div>';
+  var t=thr(),now=nowRel(date),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),pills='',blocks='',any=false;
+  TRACKED.forEach(function(l){
+    var all=allRunsOf(l,date);if(!all.length)return;any=true;
+    var runs=runsSorted(l,date);
+    if(!runs.length){blocks+='<section class="card sl" id="ln-'+l+'"><div class="slh"><b class="sln">'+l+'</b><span class="sub">no run times in this schedule</span></div>'+untimedLine(l,date,all)+'</section>';pills+='<button class="chip" data-sline="'+l+'"><b>'+l+'</b><span>no times</span></button>';return}
+    var ls=lineStatus(l,date,t),col=COL[ls.cls],res=engine(l,date),last=res.hours[NH-1];
+    var dueOf=function(ri){return res.dn[ri]!=null?last.A[ri]:(idx>=0?res.hours[idx].S[ri]:0)},
+        gm=res.runs.map(function(r,ri){return runMin(r,dueOf(ri)-last.A[ri])}),sm=applyBrk(gm,brkCredit(res.runs[0].s,Math.min(now,Math.max.apply(null,res.runs.map(pend)))));
+    var T={need:0,due:0,made:0,min:0},nman=0,rows='',runmap=S.running[date+"|"+l]||{};
+    res.runs.forEach(function(r,ri){
+      var hasM=mrKey(date,l,ri) in S.mrun,l2l=0,hasL=false;
+      for(var hh=0;hh<NH;hh++){var k=akey(date,l,hh,ri);if(k in AUTO){l2l+=AUTO[k];hasL=true}}
+      var made=last.A[ri],due=dueOf(ri),diff=made-due,dh=doneOf(date,l,ri),started=due>0.5||made>0.5,pc=Math.min(100,100*made/Math.max(1,r.need)),open=SX[date+"|"+l+"|"+ri],cur=now>=r.s&&now<pend(r)&&now>=DAY0&&now<DAY0+NH*60,c=prodColor(r.item);
+      T.need+=r.need;T.due+=due;T.made+=made;T.min+=sm[ri];if(hasM)nman++;
+      var st=dh!=null?'<span class="res y">COMPLETED</span>'+(r.need-made>=0.5?'<div class="short">short '+fmt(rnd(r.need-made))+'</div>':''):(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'<b>on pace</b>':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')+'<div class="sub">'+fmtMin(diff>0?runMin(r,diff):sm[ri])+(diff>0?' ahead':' behind')+'</div>'));
+      rows+='<div class="sr'+(cur?' cur':'')+(dh!=null?' fin':'')+(hasM?' ov-on':'')+'" id="run-'+l+'-'+ri+'">'+
+        '<div class="stm">'+clock(r.s)+' &ndash; '+clock(pend(r))+'<small>'+(runHrs(r)?runHrs(r).toFixed(1)+' h':'')+'</small></div>'+
+        '<div class="sp"><span class="sw" style="background:'+c[1]+'"></span><b>'+esc(String(r.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,46))+(cur?' <span class="tg">on now</span>':'')+(runmap[ri]!=null?' <span class="tg">running</span>':'')+'<div class="cbar thin"><i style="width:'+pc.toFixed(0)+'%;background:'+(dh!=null?'#4caf78':'var(--accent)')+'"></i></div></div>'+
+        '<div class="sn"><small>RUN CASES</small>'+fmt(rnd(r.need))+'</div><div class="sn"><small>DUE NOW</small>'+fmt(rnd(due))+'</div>'+
+        '<div class="si"><small>MADE (TYPE)</small><input class="mcin" inputmode="decimal" placeholder="'+(made>0.5?fmt(rnd(made)):'cases made')+'" data-mcl="'+l+'" data-mcrun="'+ri+'" value="'+(hasM?rnd(S.mrun[mrKey(date,l,ri)]):'')+'">'+(hasL&&!hasM?'<div class="l2lref">L2L '+fmt(rnd(l2l))+' <button class="lk" data-mcl="'+l+'" data-usel2lrun="'+ri+'">use</button></div>':'')+(hasM?'<div class="sub">'+Math.round(pc)+'% of run &middot; manual</div>':'')+'</div>'+
+        '<div class="sa">'+st+'</div>'+
+        '<label class="sd"><input type="checkbox" data-mcl="'+l+'" data-mcdone="'+ri+'"'+(dh!=null?' checked':'')+'> Done</label>'+
+        '<button class="sx'+(open?' on':'')+'" data-sx="'+date+'|'+l+'|'+ri+'" title="Hour by hour" aria-label="Hour by hour">&#9662;</button></div>'+
+        (open?sxHours(l,date,res,ri,t):'');
+    });
+    var td=T.made-T.due,tmn=T.min,bn=brkNote(gm,sm);
+    pills+='<button class="chip" data-sline="'+l+'" style="background:'+col[0]+';border-color:'+col[1]+'"><b>'+l+'</b><span style="color:'+col[1]+'">'+(ls.cls==="none"?'no counts':ls.cls==="ahead"?'ahead':ls.cls==="on"?'on target':'behind'+(tmn>=1?' '+fmtMin(tmn):''))+'</span></button>';
+    blocks+='<section class="card sl" id="ln-'+l+'"><div class="slh"><b class="sln">'+l+'</b><span class="pl" style="background:'+col[0]+';color:'+col[1]+'">'+esc(ls.head)+'</span><span class="sub">'+esc(ls.mt)+'</span><span class="slr">made <b>'+fmt(rnd(T.made))+'</b> of <b>'+fmt(rnd(T.due))+'</b> due now &middot; '+fmt(rnd(T.need))+' for the day'+(nman?' &middot; '+nman+' manual':'')+'</span></div>'+rows+
+      '<div class="slf"><span class="sub">Time behind '+(Math.abs(tmn)<0.5?'0 min':fmtMin(tmn)+(tmn>0?'':' ahead'))+(tmn>0?bn:'')+'</span>'+(nman?'<button class="btn" data-mcl="'+l+'" data-mcclear="line">Clear manual counts</button>':'')+'</div></section>';
+  });
+  if(!any)return h+'<div class="card note-card">No schedule for '+pretty(date)+'.</div>';
+  h+='<div class="run" style="margin:0 0 10px"><span class="lab">JUMP TO</span>'+pills+'</div>'+blocks;
+  h+='<div class="sub" style="margin:8px 0">"Due now" counts only hours that have finished. A run total you type is spread over the hours that product was scheduled, so every view agrees with it. L2L numbers are a grey reference only. Time behind is net of break credit; a run ticked Done owes nothing.</div>';
+  h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-mcclear="day">Clear manual counts, all lines this day</button><button class="btn" data-mcclear="all">Clear ALL manual counts</button></div>';
+  return h;
+}
+var LAST={t:"",m:""};function sigNow(){return tab+"|"+curDate()+"|"+DM.sec+"|"+FS.sec+"|"+TR.sec}
 function render(){
   rT=null;
   var ae=document.activeElement,fk=null,fpos=0;
   if(ae&&ae.dataset&&ae.dataset.k){fk=ae.dataset.k;try{fpos=ae.selectionStart}catch(e){}}
   var date=curDate(),t=thr(),th="";
-  th+='<button class="tab'+("Board"===tab?" on":"")+'" data-tab="Board">Board</button>';
-  TRACKED.forEach(function(l){th+='<button class="tab'+(l===tab?" on":"")+'" data-tab="'+l+'"><i class="'+tabDot(l,date,t)+'"></i>'+l+'</button>'});
-  [["Trends"," sep"],["Full schedule",""],["Demand",""],["Manual counts",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
+  [["Board",""],["Schedule",""],["Trends"," sep"],["Full schedule",""],["Demand",""]].forEach(function(x){th+='<button class="tab'+(x[0]===tab?" on":"")+x[1]+'" data-tab="'+x[0]+'">'+x[0]+'</button>'});
   if(th!==LAST.t){$("tabs").innerHTML=th;LAST.t=th}
   var h="";
   if(tab==="Trends")h=buildTrends();
   else if(tab==="Demand")h=buildDemand();
-  else if(tab==="Manual counts")h=buildManual(date);
   else if(!date)h='<div class="card welcome"><h2>Waiting for the schedule</h2><p class="sub" style="font-size:15px">It loads by itself from schedule.json. Or open Settings (gear) and choose the weekly workbook.</p>'+(schedErr?'<p class="sub" style="color:var(--badfg)">'+esc(schedErr)+'</p>':'')+'</div>';
+  else if(tab==="Schedule")h=buildSchedule(date);
   else if(tab==="Board")h=buildBoard(date);
   else if(tab==="Full schedule")h=buildFull(date);
-  else h=buildLine(tab,date);
+  else h=buildBoard(date);
   var same=h===LAST.m;if(!same){var sy=window.scrollY,fresh0=sigNow()!==lastSig;$("main").innerHTML=h;LAST.m=h;if(!fresh0&&Math.abs(window.scrollY-sy)>1)window.scrollTo(0,sy)}
   statusLabel();if(!same)polish();
   if(fk){var e=document.querySelector('[data-k="'+fk+'"]');if(e){e.focus();try{e.setSelectionRange(fpos,fpos)}catch(x){}}}
@@ -1073,103 +1231,6 @@ function barsHtml(line,date,runs,w0,span,now,live,click){
 }
 function hourHead(w0,n){var h='<div class="tlh" style="grid-template-columns:repeat('+n+',1fr)">';for(var i=0;i<n;i++)h+='<div>'+hr(w0+60*i)+'</div>';return h+'</div>'}
 var CURSEL={k:"",h:0};
-function buildLine(line,date){
-  var runs=runsSorted(line,date),all=allRunsOf(line,date);
-  if(!runs.length){
-    if(!all.length)return '<div class="card note-card">No schedule for '+line+' on '+pretty(date)+'.</div>';
-    return untimedLine(line,date,all);
-  }
-  var t=thr(),shift=DAY0,ls=lineStatus(line,date,t),nums=ls.nums,now=nowRel(date),res=engine(line,date);
-  var live=shift-60<=now&&now<=shift+NH*60+120,curH=live?Math.floor((now-shift)/60):-1,col=COL[ls.cls];
-  var key=date+"|"+line,selH=SEL[key];
-  if(selH==null){
-    if(curH>=0&&curH<NH)selH=curH;
-    else{selH=-1;res.hours.forEach(function(H,i){if(H.prods.some(function(q){return q.act!=null}))selH=i});
-      if(selH<0){selH=0;for(var i=0;i<NH;i++)if(res.hours[i].prods.length){selH=i;break}}}
-  }
-  CURSEL={k:key,h:selH};
-  var sh=selH<12?0:1,h0=sh*12;
-  // 1. status strip: am I on plan / how much / how efficient / what is running and next
-  var et=effTotal(res,rng(0,NH)),cur=null,nxt=null;
-  runs.forEach(function(r){var p=pend(r);if(live&&r.s<=now&&now<p)cur=r;if(r.s>now&&(!nxt||r.s<nxt.s))nxt=r});
-  var h='<div class="strip"><div class="card kpi st" style="background:'+col[0]+';color:'+col[1]+';border-color:'+col[1]+'"><div class="lab">'+line+' &middot; '+pretty(date)+'</div><div class="big">'+esc(ls.head)+'</div><div style="font-weight:600;font-size:14px;min-height:18px">'+esc(ls.mt)+'</div></div>';
-  h+='<div class="card kpi"><div class="lab">MADE vs SCHEDULED</div>';
-  if(nums){var pc=nums.exp?Math.min(1,nums.act/nums.exp):0;h+='<div class="big">'+fmt(rnd(nums.act))+' <span class="sub" style="font-size:14px">of '+fmt(nums.exp)+'</span></div><div class="bar2"><i style="width:'+(pc*100)+'%;background:'+col[1]+'"></i></div><div class="sub">through '+nums.thru+'</div>'}
-  else h+='<div class="big" style="color:var(--muted);font-size:16px;padding:6px 0 14px">No counts yet</div>';
-  h+='</div><div class="card kpi"><div class="lab">EFFICIENCY</div>';
-  h+=et?'<div class="big"><span class="pl '+effClass(et.act/et.tgt,t)+'" style="font-size:20px">'+rnd(100*et.act/et.tgt)+'%</span></div><div class="sub">made '+fmt(rnd(et.act))+' of '+fmt(rnd(et.tgt))+' scheduled-rate cases</div>':'<div class="big" style="color:var(--muted);font-size:16px;padding:6px 0 14px">&mdash;</div>';
-  h+='</div><div class="card kpi"><div class="lab">'+(live?'NOW &middot; '+clock(now):'PLAN DAY')+'</div>';
-  if(live){h+='<div class="big" style="font-size:16px">'+(cur?'<b>'+esc(cur.item)+'</b> '+esc(cur.name.slice(0,26)):'Nothing scheduled')+'</div><div class="sub">'+(cur?'until '+clock(pend(cur)):'')+(nxt?(cur?' &middot; ':'')+'next '+esc(nxt.item)+' at '+clock(nxt.s):'')+'</div>'}
-  else h+='<div class="big" style="font-size:16px;color:var(--muted)">Not running</div><div class="sub">'+clock(shift)+' to '+clock(shift+NH*60)+'</div>';
-  h+='</div></div>';
-  // 2. heads-up (one line, tap to open) and now-running chips
-  var runmap=S.running[key]||{},extra=ls.info.slice();
-  Object.keys(runmap).sort(function(a,b){return runmap[a]-runmap[b]}).forEach(function(ris){
-    var ri=+ris;if(ri>=runs.length)return;var r=runs[ri];
-    var started=(runmap[ris]-new Date(date+"T00:00:00").getTime())/60000,late=rnd(started-r.s);
-    var tx="Running "+r.item+", started "+clock(started)+" ("+(late>0?late+" min late":(late<0?(-late)+" min early":"on time"))+").";
-    var o=runInfo(line,date,r,ri,now,t);
-    if(o.tracked)tx+=" Made "+fmt(rnd(o.made))+" of "+fmt(rnd(o.need))+"; "+fmt(rnd(o.due))+" due by the start of this hour: "+o.st+".";
-    extra.push(["n",tx])});
-  var wbm=dayWb(line,date);
-  if(wbm>0&&!res.hours.some(function(H){return H.prods.some(function(q){return q.act!=null})}))extra.push(["n","The weekly workbook records "+fmt(rnd(wbm))+" cases made for this day (no hourly counts exist, so the hourly view stays empty)."]);
-  if(live&&!Object.keys(runmap).length)extra.push(["w","Tap the product that is running below so the tracker knows."]);
-  if(extra.length)h+='<details class="hu"><summary>Heads-up ('+extra.length+'): <span style="font-weight:400;color:var(--muted)">'+esc(extra[0][1].slice(0,95))+(extra[0][1].length>95?'...':'')+'</span></summary><div class="alerts">'+extra.map(function(x){return alertH(x[0],x[1])}).join("")+'</div></details>';
-  var chips=[];
-  runs.forEach(function(r,i){var on=runmap[i]!=null,sn=live&&r.s<=now&&now<pend(r),near=live&&r.s<=now+60&&pend(r)>=now-120;
-    if(showAllChips||on||sn||near)chips.push('<button class="chip'+(on?" on":(sn?" sn":""))+'" data-run="'+i+'"><b>'+esc(r.item)+'</b><span>'+(on?"running &middot; ":"")+clock(r.s)+'</span></button>')});
-  h+='<div class="run"><span class="lab">TAP WHAT IS RUNNING</span>'+chips.join("")+'<button class="chip" data-chips="1">'+(showAllChips?"Fewer":"All products")+'</button></div>';
-  // 3. shift timeline: product bars (filled = made so far) with the hour results underneath
-  h+='<div class="seg"><button data-shsel="0" class="'+(sh===0?"on":"")+'">1st shift &nbsp;6am-6pm</button><button data-shsel="1" class="'+(sh===1?"on":"")+'">2nd shift &nbsp;6pm-6am</button></div>';
-  var w0=shift+60*h0;
-  h+='<div class="tw"><div class="tl">'+hourHead(w0,12)+barsHtml(line,date,runs,w0,720,now,live,false)+'<div class="tlr">';
-  for(var i=0;i<12;i++){
-    var hI=h0+i,H=res.hours[hI],ok=hourOK(H,t),act=0,any=false;H.prods.forEach(function(q){if(q.act!=null){any=true;act+=q.act}});
-    h+='<button class="tlc'+(ok==null?"":(ok?" ok":" bad"))+(hI===selH?" sel":"")+(hI===curH?" now":"")+'" data-hsel="'+hI+'"><b>'+(any?fmt(rnd(act)):"&ndash;")+'</b><small>of '+fmt(H.exp)+'</small>'+(ok===false&&H.exp>0?'<small class="mn">-'+rnd(Math.max(0,(H.exp-act)/H.exp)*60)+' min</small>':'')+'</button>';
-  }
-  h+='</div></div></div>';
-  // 4. enter counts for the chosen hour
-  var H=res.hours[selH],okS=hourOK(H,t),eeS=effHour(H,res.runs),nk=key+"|"+selH;
-  h+='<div class="card entry"><div class="eh"><button class="btn ico" data-hnav="-1" title="Earlier hour">&#8249;</button><div class="et">'+hr(H.hs)+' &ndash; '+hr(H.he)+(selH===curH?' <span class="nowp" style="display:inline-block">NOW</span>':'')+'</div><button class="btn ico" data-hnav="1" title="Later hour">&#8250;</button>'+(live&&selH!==curH?'<button class="btn" data-hnow="1">Go to now</button>':'')+'<div class="er">'+(okS==null?'':(okS?'<span class="res y">&#10004; YES</span>':'<span class="res n">&#10006; NO</span>'))+(eeS?' <span class="pl '+effClass(eeS.act/eeS.tgt,t)+'">'+rnd(100*eeS.act/eeS.tgt)+'% efficiency</span>':'')+'</div></div>';
-  if(!H.prods.length)h+='<div class="sub" style="padding:12px 4px">Nothing is scheduled in this hour.</div>';
-  H.prods.forEach(function(q){
-    var k=akey(date,line,selH,q.ri),manual=k in S.acts,auto=q.act!=null&&!manual,c=prodColor(q.item);
-    h+='<div class="er2"><div class="ep"><span class="sw" style="background:'+c[1]+'"></span><b>'+esc(q.item)+'</b> <span class="sub">'+esc(q.name.slice(0,48))+'</span></div>';
-    h+='<div class="ee">Expected <b>'+fmt(rnd(q.exp))+'</b>'+(q.back>=0.5?' <span class="owes">owes '+fmt(rnd(q.back))+'</span>':'')+(k in AUTO&&(!manual||Math.round(AUTO[k])!==Math.round(S.acts[k]))?'<div class="l2lref">L2L reports '+fmt(rnd(AUTO[k]))+(manual?'':' <button class="lk" data-usel2l="'+k+'">use this</button>')+'</div>':'')+'</div>';
-    h+='<input class="act big'+(auto?" auto":"")+'" inputmode="decimal" placeholder="actual" data-k="'+k+'" data-act="'+k+'" value="'+(q.act==null?"":rnd(q.act))+'">';
-    h+='<label class="dn"><input type="checkbox" data-done="'+line+'|'+q.ri+'|'+selH+'"'+(q.done?" checked":"")+'> order finished'+(q.done&&(q.short||0)>=0.5?' <span class="short">short '+fmt(rnd(q.short))+'</span>':'')+'</label></div>';
-  });
-  h+='<input class="note" placeholder="Note for this hour (downtime, jam, ...)" data-note="'+nk+'" value="'+esc(S.notes[nk]||"")+'"></div>';
-  // 5. hour log: one row per product per hour, so each product lines up with what was made
-  h+='<h3 class="gh" style="margin-top:18px">Hour by hour: what ran</h3><div class="sub" style="margin-bottom:6px">One row per product. <b>Planned</b> = the schedule says this product runs in this hour. <b>Owed</b> = cases still owed from earlier hours. Hour totals are on the right.</div>';
-  [0,1].forEach(function(s2){
-    var b0=s2*12,ga=0,gt=0,rows='';
-    for(var i=0;i<12;i++){
-      var hI=b0+i,HH=res.hours[hI],ok=hourOK(HH,t),ee=effHour(HH,res.runs),act=0,any=false;
-      HH.prods.forEach(function(q){if(q.act!=null){any=true;act+=q.act}});
-      if(ee){ga+=ee.act;gt+=ee.tgt}
-      var n=Math.max(1,HH.prods.length),cls='lg hg'+(hI===selH?" sel":"")+(hI===curH?" cur":""),
-          hc='<td class="hrc" rowspan="'+n+'">'+hr(HH.hs)+'-'+hr(HH.he)+(hI===curH?'<span class="nowp">NOW</span>':'')+'</td>',
-          tail='<td class="ex hs" rowspan="'+n+'">'+(any?'<b>'+fmt(rnd(act))+'</b> <span class="sub">of '+fmt(HH.exp)+'</span>':(HH.exp>0?'<span class="sub">expected '+fmt(HH.exp)+'</span>':'<span style="color:#b4bdca">&ndash;</span>'))+'</td><td class="hs" rowspan="'+n+'" style="text-align:center">'+(ok==null?'<span style="color:#b4bdca">&mdash;</span>':(ok?'<span class="res y">&#10004; YES</span>':'<span class="res n">&#10006; NO</span>'))+'</td><td class="hs" rowspan="'+n+'" style="text-align:center">'+(ee?'<span class="pl '+effClass(ee.act/ee.tgt,t)+'">'+rnd(100*ee.act/ee.tgt)+'%</span>':'<span style="color:#b4bdca">&mdash;</span>')+'</td>';
-      if(!HH.prods.length){rows+='<tr class="'+cls+'" data-hsel="'+hI+'">'+hc+'<td colspan="6" style="color:#9aa5b5;font-style:italic">nothing scheduled</td>'+tail+'</tr>';continue}
-      HH.prods.forEach(function(q,qi){
-        var r=res.runs[q.ri]||{},planned=q.sch>=0.5,col=prodColor(q.item)[1],dv=q.act!=null?rnd(q.act-q.exp):null;
-        rows+='<tr class="'+cls+(qi===0?'':' sub2')+(planned?'':' carry')+'" data-hsel="'+hI+'">'+(qi===0?hc:'')+
-          '<td class="pc" style="border-left:5px solid '+col+'"><b>'+esc(String(q.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,44))+(planned?'':' <span class="tg">carry-over</span>')+'</td>'+
-          '<td class="ex">'+(planned?'<b>'+fmt(rnd(q.sch))+'</b>':'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
-          '<td class="ex">'+(q.back>=0.5?fmt(rnd(q.back)):'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
-          '<td class="ex">'+fmt(rnd(q.exp))+'</td>'+
-          '<td class="ex">'+(q.act!=null?'<b>'+fmt(rnd(q.act))+'</b>':(akey(date,line,hI,q.ri) in AUTO?'<span class="l2lref" title="L2L reference, not counted">L2L '+fmt(rnd(AUTO[akey(date,line,hI,q.ri)]))+'</span>':'<span style="color:#b4bdca">&ndash;</span>'))+'</td>'+
-          '<td class="ex">'+(dv==null?'<span style="color:#b4bdca">&ndash;</span>':'<span style="color:'+(dv>=0?'var(--okfg)':'var(--badfg)')+'">'+(dv>=0?'+':'')+fmt(dv)+'</span>')+'</td>'+
-          (qi===0?tail:'')+'</tr>';
-      });
-    }
-    h+='<div class="card tw" style="margin-bottom:12px"><table class="hr hl" style="margin:0"><thead><tr><th colspan="10" style="background:var(--ink);color:#fff">'+(s2===0?"1ST":"2ND")+' SHIFT &nbsp; '+clock(DAY0+60*b0)+' - '+clock(DAY0+60*(b0+12))+'</th></tr><tr><th>HOUR</th><th>PRODUCT</th><th style="text-align:right">PLANNED</th><th style="text-align:right">OWED</th><th style="text-align:right">EXPECTED</th><th style="text-align:right">MADE</th><th style="text-align:right">+/-</th><th class="c">HOUR TOTAL</th><th class="c">ON TARGET</th><th class="c">EFFICIENCY</th></tr></thead><tbody>'+rows+
-      '<tr><td colspan="10" class="effsum '+(gt>0?effClass(ga/gt,t):"c-mut")+'">'+(s2===0?"1ST":"2ND")+' SHIFT EFFICIENCY &nbsp; '+(gt>0?rnd(100*ga/gt)+'% (made '+fmt(rnd(ga))+' of '+fmt(rnd(gt))+' scheduled-rate cases, hours with counts only)':'no counts yet')+'</td></tr></tbody></table></div>';
-  });
-  h+='<div class="hint">Tap an hour above (or a row) to enter or fix its counts. Your typed counts are the source of truth; L2L numbers show in grey as a reference (tap "use this" to copy one in). Bars: filled part = cases made so far.</div>';
-  return h;
-}
 // every line on one 24-hour board: the schedule as bars, with progress and a now marker
 function ganttHtml(date){
   var lines=TRACKED.filter(function(l){return runsSorted(l,date).length});
@@ -1352,34 +1413,6 @@ function mcSetRun(d,l,ri,txt){
   vals.forEach(function(v,i){if(w[i]>0){var k=akey(d,l,i,ri);S.acts[k]=v;syncPush("a",k,v)}});
   S.mrun[mrKey(d,l,ri)]=M;syncPush("m",mrKey(d,l,ri),M);save();
 }
-function buildManual(date){
-  var h='<h2>Manual counts</h2>';
-  if(!date)return h+'<div class="sub">No schedule loaded.</div>';
-  if(TRACKED.indexOf(MC.line)<0)MC.line=TRACKED[0];
-  var l=MC.line;
-  h+='<div class="sub" style="margin-bottom:8px">Type the total cases made so far for each product if L2L is wrong. It replaces L2L for that product until you clear it, and tick <b>Completed</b> when the run is finished. Day: <b>'+dayname(date)+' '+pretty(date)+'</b> (change it with the date box at the top).</div>';
-  h+='<div class="seg">'+TRACKED.map(function(x){return '<button class="'+(x===l?'on':'')+'" data-mcline="'+x+'">'+x+'</button>'}).join("")+'</div>';
-  if(!runsSorted(l,date).length)return h+'<div class="card note-card">'+l+' has no hourly schedule on this day.</div>';
-  var res=engine(l,date),now=nowRel(date),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),last=res.hours[NH-1],rows='',T={need:0,due:0,made:0},nman=0,dueOf=function(ri){return res.dn[ri]!=null?last.A[ri]:(idx>=0?res.hours[idx].S[ri]:0)},gm=res.runs.map(function(r,ri){return runMin(r,dueOf(ri)-last.A[ri])}),sm=applyBrk(gm,brkCredit(res.runs[0].s,Math.min(now,Math.max.apply(null,res.runs.map(pend))))),bnote=brkNote(gm,sm);
-  res.runs.forEach(function(r,ri){
-    var hasM=mrKey(date,l,ri) in S.mrun,l2l=0,hasL=false;
-    for(var hh=0;hh<NH;hh++){var k=akey(date,l,hh,ri);if(k in AUTO){l2l+=AUTO[k];hasL=true}}
-    var made=last.A[ri],due=dueOf(ri),diff=made-due,dh=doneOf(date,l,ri),started=due>0.5||made>0.5;
-    T.need+=r.need;T.due+=due;T.made+=made;T.min=(T.min||0)+sm[ri];if(hasM)nman++;
-    var st=dh!=null?'<span class="res y">COMPLETED</span>':(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'on pace':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')+'<div class="sub">'+fmtMin(diff>0?runMin(r,diff):sm[ri])+(diff>0?' ahead':' behind')+'</div>'));
-    rows+='<tr'+(hasM?' class="ov-on"':'')+'><td class="pc" style="border-left:5px solid '+prodColor(r.item)[1]+'"><b>'+esc(String(r.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,44))+'<div class="sub">'+(r.s!=null?clock(r.s)+' - '+clock(r.e):'')+'</div></td>'+
-      '<td class="ex">'+fmt(rnd(r.need))+'</td><td class="ex">'+fmt(rnd(due))+'</td><td class="ex">'+(hasL?'<span class="l2lref">'+fmt(rnd(l2l))+'</span>'+(hasM?'':' <button class="lk" data-usel2lrun="'+ri+'">use</button>'):'<span style="color:#b4bdca">&ndash;</span>')+'</td>'+
-      '<td><input class="mcin" inputmode="decimal" placeholder="cases made" data-mcrun="'+ri+'" value="'+(hasM?rnd(S.mrun[mrKey(date,l,ri)]):'')+'"></td>'+
-      '<td class="ex"><b>'+fmt(rnd(made))+'</b>'+(hasM?' <span class="tg">manual</span>':'')+'<div class="sub">'+Math.round(100*made/Math.max(1,r.need))+'% of run</div></td><td class="ex">'+st+'</td>'+
-      '<td style="text-align:center"><input type="checkbox" data-mcdone="'+ri+'"'+(dh!=null?' checked':'')+'></td></tr>';
-  });
-  var td=T.made-T.due;
-  h+='<div class="card tw"><table class="hr hl" style="margin:0"><thead><tr><th>PRODUCT</th><th style="text-align:right">RUN CASES</th><th style="text-align:right">DUE BY NOW</th><th style="text-align:right">L2L (REFERENCE)</th><th>MANUAL TOTAL</th><th style="text-align:right">MADE</th><th style="text-align:right">AHEAD / BEHIND</th><th class="c">COMPLETED</th></tr></thead><tbody>'+rows+
-    '<tr><td class="effsum" colspan="8" style="text-align:left">'+l+' TOTAL &nbsp; made '+fmt(rnd(T.made))+' of '+fmt(rnd(T.due))+' due by now &middot; '+(Math.abs(td)<0.5?'on pace':(td>0?fmt(rnd(td))+' ahead':fmt(rnd(-td))+' behind')+' ('+fmtMin(T.min)+(T.min>0?' behind':' ahead')+')'+(T.min>0?bnote:''))+' &middot; '+fmt(rnd(T.need))+' scheduled for the day</td></tr></tbody></table></div>';
-  h+='<div class="sub" style="margin:8px 0">"Due by now" counts only hours that have finished. A manual total is spread over the hours that product was scheduled, so the line tab and Board agree with it. Update the number as more is made. '+nman+' manual product(s) on '+l+' this day.</div>';
-  h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-mcclear="line">Clear manual counts for '+l+' this day</button><button class="btn" data-mcclear="day">Clear for all lines this day</button><button class="btn" data-mcclear="all">Clear ALL manual counts</button></div>';
-  return h;
-}
 function buildFull(date){
   var h=buildFullAll(date),p=h.split("\u0001");if(p.length<3)return h;
   var pk=pickSec(h,FS.sec);
@@ -1490,7 +1523,11 @@ function onFile(f){
   fr.readAsArrayBuffer(f);
 }
 document.addEventListener("click",function(e){
-  var t=e.target.closest("[data-usel2l],[data-usel2lrun],[data-mcline],[data-mcclear],[data-fday],[data-fsec],[data-trsec],[data-dmsec],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  var t=e.target.closest("[data-usel2l],[data-usel2lrun],[data-mcline],[data-mcclear],[data-fday],[data-fsec],[data-trsec],[data-dmsec],[data-sx],[data-sline],[data-dmp],[data-hsel],[data-hnav],[data-hnow],[data-shsel],[data-gline],[data-tab],[data-run],[data-chips],[data-close],#bLoad,#bShare,#bPull,#bUpc,#saveUpc,#bTr,#bExp,#bSet,#l2lpill,#dPrev,#dNext");if(!t)return;
+  if(t.dataset.mcl)MC.line=t.dataset.mcl;
+  if(t.dataset.dmp){DM.pk=t.dataset.dmp;DM.sec="pd";render();window.scrollTo(0,0);return}
+  if(t.dataset.sx){SX[t.dataset.sx]=!SX[t.dataset.sx];render();return}
+  if(t.dataset.sline){var se=document.getElementById("ln-"+t.dataset.sline);if(se){se.scrollIntoView({behavior:RM?"auto":"smooth",block:"start"});se.classList.remove("flash");void se.offsetWidth;se.classList.add("flash")}return}
   if(t.dataset.usel2l){var uk=t.dataset.usel2l;if(uk in AUTO){S.acts[uk]=Math.round(AUTO[uk]);syncPush("a",uk,S.acts[uk]);save();applyAll();render()}return}
   if(t.dataset.usel2lrun!=null){var ur=+t.dataset.usel2lrun,ud=curDate(),ut=0;for(var uh=0;uh<NH;uh++){var uk2=akey(ud,MC.line,uh,ur);if(uk2 in AUTO)ut+=AUTO[uk2]}mcSetRun(ud,MC.line,ur,String(Math.round(ut)));applyAll();render();return}
   if(t.dataset.mcline){MC.line=t.dataset.mcline;render();return}
@@ -1506,9 +1543,9 @@ document.addEventListener("click",function(e){
   if(t.dataset.hnav){SEL[CURSEL.k]=Math.max(0,Math.min(NH-1,CURSEL.h+(+t.dataset.hnav)));render();return}
   if(t.dataset.hnow){delete SEL[CURSEL.k];render();return}
   if(t.dataset.shsel!=null){var tg=+t.dataset.shsel;SEL[CURSEL.k]=(CURSEL.h<12?0:1)===tg?CURSEL.h:(tg*12);render();return}
-  if(t.dataset.gline){tab=t.dataset.gline;render();window.scrollTo(0,0);return}
+  if(t.dataset.gline){tab="Schedule";var gl=t.dataset.gline;render();var ge=document.getElementById("ln-"+gl);if(ge)ge.scrollIntoView({block:"start"});return}
   if(t.dataset.tab){tab=t.dataset.tab;render();if(tab==="Trends"&&!TR.once){TR.once=true;loadHistory()}else if(tab==="Demand"&&!DM.once){DM.once=true;var of=TR.from;TR.from=addDays(opDay(),-370);loadHistory(true).then(function(){TR.from=of;render()})}return}
-  if(t.dataset.run!=null){var d=curDate(),k=d+"|"+tab,m=(S.running[k]=S.running[k]||{}),i=t.dataset.run;
+  if(t.dataset.run!=null){var d=curDate(),k=d+"|"+(t.dataset.runl||tab),m=(S.running[k]=S.running[k]||{}),i=t.dataset.run;
     if(m[i]!=null){delete m[i];syncPush("r",k+"|"+i,null)}else{m[i]=Date.now();syncPush("r",k+"|"+i,m[i])}save();render();return}
   if(t.dataset.chips){showAllChips=!showAllChips;render();return}
   if(t.dataset.close){closeModal();return}
@@ -1527,6 +1564,7 @@ document.addEventListener("input",function(e){
   var t=e.target;
   if(t.dataset.act){var v=t.value.replace(/[^0-9.]/g,"");if(v!==t.value)t.value=v;var f=parseFloat(v);
     if(v==="")delete S.acts[t.dataset.act];else if(!isNaN(f))S.acts[t.dataset.act]=f;else return;
+    var ap=t.dataset.act.split("|"),mk2=ap[0]+"|"+ap[1]+"|"+ap[3];if(S.mrun&&mk2 in S.mrun){delete S.mrun[mk2];syncPush("m",mk2,null)}
     syncPush("a",t.dataset.act,v===""?null:f);save();later(1100)}
   else if(t.dataset.note){if(t.value.trim())S.notes[t.dataset.note]=t.value;else delete S.notes[t.dataset.note];syncPush("n",t.dataset.note,t.value.trim()?t.value:null);save()}
   else if(t.dataset.k==="dmq"){DM.q=t.value;later(300)}
@@ -1542,6 +1580,7 @@ document.addEventListener("change",function(e){
     else{delete S.dones[key];syncPush("d",key,null)}
     save();render();return}
   if(t.id==="useL2L"){S.useL2L=t.checked?1:0;syncPush("s","useL2L",S.useL2L);save();applyAll();render();return}
+  if(t.dataset.mcl)MC.line=t.dataset.mcl;
   if(t.dataset.mcrun!=null){mcSetRun(curDate(),MC.line,+t.dataset.mcrun,t.value);applyAll();render();return}
   if(t.dataset.mcdone!=null){var md=curDate(),mri=+t.dataset.mcdone,mkey=md+"|"+MC.line+"|"+mri;
     if(t.checked){var mres=engine(MC.line,md),mr=mres.runs[mri],mnow=nowRel(md),mh=mnow<NH*60+DAY0?Math.min(NH-1,Math.max(0,Math.floor((mnow-DAY0)/60))):Math.min(NH-1,Math.max(0,Math.floor((mr.e-DAY0)/60))),msh=Math.round(mr.need-mres.hours[NH-1].A[mri]);
@@ -1561,6 +1600,7 @@ document.addEventListener("change",function(e){
   else if(t.id==="dmLine"){DM.line=t.value;render()}
   else if(t.id==="dmWks"){DM.wks=+t.value;render()}
   else if(t.id==="dmSort"){DM.sort=t.value;render()}
+  else if(t.id==="dmProd"){DM.pk=t.value;render()}
 });
 document.addEventListener("mousedown",function(e){if(e.target.id==="mbg")closeModal()});
 document.addEventListener("keydown",function(e){if(e.key==="Escape")closeModal()});
@@ -1621,24 +1661,23 @@ function qList(v){
 function qShow(){
   var box=$("qres"),L=qList($("q").value);QI=L.length?0:-1;box.hidden=!L.length&&!$("q").value.trim();
   box.innerHTML=L.length?"":'<div class="sub" style="padding:12px 14px">No product found on this day.</div>';
-  L.forEach(function(x,i){var b=document.createElement("button");b.className=i===0?"hi":"";b.dataset.ql=x.l;b.dataset.qs=x.r.s;
+  L.forEach(function(x,i){var b=document.createElement("button");b.className=i===0?"hi":"";b.dataset.ql=x.l;b.dataset.qs=x.r.s;b.dataset.qi=runsSorted(x.l,curDate()).indexOf(x.r);
     b.innerHTML="<b></b><span class='sub'></span><small></small>";b.children[0].textContent=x.r.item;b.children[1].textContent=x.r.name||"";b.children[2].textContent=x.l;box.appendChild(b)});
 }
-function qGo(l,s){
-  $("qres").hidden=true;$("q").value="";$("q").blur();tab=l;
-  var h=Math.max(0,Math.min(NH-1,Math.floor((+s-DAY0)/60)));render();try{if(CURSEL&&CURSEL.k){SEL[CURSEL.k]=h;render()}}catch(x){}
-  var el=document.querySelector(".entry")||$("main").firstChild;if(el&&el.classList){el.classList.add("flash");el.scrollIntoView({behavior:RM?"auto":"smooth",block:"center"})}
+function qGo(l,s,ri){
+  $("qres").hidden=true;$("q").value="";$("q").blur();tab="Schedule";SX[curDate()+"|"+l+"|"+ri]=true;render();
+  var el=document.getElementById("run-"+l+"-"+ri);if(el){el.classList.add("flash");el.scrollIntoView({behavior:RM?"auto":"smooth",block:"center"})}
 }
 document.addEventListener("input",function(e){if(e.target.id==="q")qShow()});
 document.addEventListener("focusin",function(e){if(e.target.id==="q"&&e.target.value)qShow()});
-document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest("[data-ql]");if(b){qGo(b.dataset.ql,b.dataset.qs);return}if(!e.target.closest(".qs"))$("qres").hidden=true});
+document.addEventListener("click",function(e){var b=e.target.closest&&e.target.closest("[data-ql]");if(b){qGo(b.dataset.ql,b.dataset.qs,b.dataset.qi);return}if(!e.target.closest(".qs"))$("qres").hidden=true});
 /* keyboard */
 document.addEventListener("keydown",function(e){
   var a=document.activeElement,typing=a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"||a.tagName==="SELECT");
   if(a&&a.id==="q"){
     var bs=[].slice.call($("qres").querySelectorAll("button"));
     if(e.key==="ArrowDown"||e.key==="ArrowUp"){e.preventDefault();if(!bs.length)return;QI=(QI+(e.key==="ArrowDown"?1:-1)+bs.length)%bs.length;bs.forEach(function(b,i){b.className=i===QI?"hi":""});bs[QI].scrollIntoView({block:"nearest"})}
-    else if(e.key==="Enter"&&bs[QI]){e.preventDefault();qGo(bs[QI].dataset.ql,bs[QI].dataset.qs)}
+    else if(e.key==="Enter"&&bs[QI]){e.preventDefault();qGo(bs[QI].dataset.ql,bs[QI].dataset.qs,bs[QI].dataset.qi)}
     else if(e.key==="Escape"){$("qres").hidden=true;a.value="";a.blur()}
     return;
   }
@@ -1646,14 +1685,12 @@ document.addEventListener("keydown",function(e){
   var k=e.key,go=function(t){tab=t;render();window.scrollTo(0,0)};
   if((e.ctrlKey||e.metaKey)&&k==="z"){if(undoFn){e.preventDefault();var f=undoFn;undoFn=null;$("toast").classList.remove("on");f();toast("Undone")}return}
   if(k==="/"){e.preventDefault();$("q").focus();return}
-  if(k==="ArrowRight"||k==="ArrowLeft"){var n=document.querySelector('[data-hnav="'+(k==="ArrowRight"?1:-1)+'"]');if(n){e.preventDefault();n.click()}return}
-  if(k==="n"){var nb=document.querySelector("[data-hnow]");if(nb)nb.click();return}
   if(k==="["||k==="]"){$(k==="["?"dPrev":"dNext").click();return}
-  if(/^[1-9]$/.test(k)&&TRACKED[+k-1]){go(TRACKED[+k-1]);return}
-  var map={b:"Board",t:"Trends",f:"Full schedule",d:"Demand",m:"Manual counts"};
+  if(/^[1-9]$/.test(k)&&TRACKED[+k-1]){if(tab!=="Schedule")go("Schedule");var le=document.getElementById("ln-"+TRACKED[+k-1]);if(le)le.scrollIntoView({behavior:RM?"auto":"smooth",block:"start"});return}
+  var map={b:"Board",t:"Trends",f:"Full schedule",d:"Demand",s:"Schedule"};
   if(map[k.toLowerCase()]){go(map[k.toLowerCase()]);return}
   if(k==="u"&&undoFn){var f2=undoFn;undoFn=null;$("toast").classList.remove("on");f2();toast("Undone");return}
-  if(k==="?"){toast("Keys:  / find   1-"+TRACKED.length+" lines   B board   T trends   F full   M manual   ← → hour   N now   [ ] day   U undo")}
+  if(k==="?"){toast("Keys:  / find   S schedule   1-"+TRACKED.length+" jump to line   B board   T trends   F full   D demand   [ ] day   U undo")}
 });
 /* swipe on phones: hours on the entry card, lines elsewhere */
 (function(){
@@ -1665,7 +1702,7 @@ document.addEventListener("keydown",function(e){
     if(tg.closest("input,select,textarea,.tw,.tlt,table,.gantt"))return;
     var dir=dx<0?1:-1,hn=tg.closest(".entry,.tlr")&&document.querySelector('[data-hnav="'+dir+'"]');
     if(hn){hn.click();return}
-    var order=["Board"].concat(TRACKED,["Trends","Full schedule","Demand","Manual counts"]),i=order.indexOf(tab)+dir;
+    var order=["Board","Schedule","Trends","Full schedule","Demand"],i=order.indexOf(tab)+dir;
     if(i>=0&&i<order.length){tab=order[i];render();window.scrollTo(0,0);var on=document.querySelector(".tab.on");if(on&&on.scrollIntoView)on.scrollIntoView({inline:"center",block:"nearest"})}
   },{passive:true});
 })();
