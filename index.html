@@ -2,7 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Hourly Tracker</title>
 <link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#16263a">
@@ -317,6 +318,28 @@ table.pw td{font-size:11px;padding:4px 3px;min-width:44px}table.pw th{font-size:
 .shl input,.shrow input{padding:4px 6px;border:1px solid var(--gb);border-radius:8px;background:rgba(255,255,255,.8);font-size:13px}
 .shrow{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;font-size:12px;padding:6px 2px 8px;border-bottom:1px dashed rgba(160,176,200,.5);margin-bottom:4px}
 .shifted{color:#85580a;font-weight:600}
+
+/* ===== iPhone Duo / notch / foldable: safe areas and fold-aware widths ===== */
+.top{padding-top:calc(8px + env(safe-area-inset-top));padding-left:calc(14px + env(safe-area-inset-left));padding-right:calc(14px + env(safe-area-inset-right))}
+.tabs,#panel{margin-left:env(safe-area-inset-left);margin-right:env(safe-area-inset-right)}
+.main{padding-left:max(10px,env(safe-area-inset-left));padding-right:max(10px,env(safe-area-inset-right))}
+@media(min-width:701px){.main{padding-left:max(0px,env(safe-area-inset-left));padding-right:max(0px,env(safe-area-inset-right))}}
+.foot{padding-bottom:calc(14px + env(safe-area-inset-bottom))}
+#toast{bottom:calc(22px + env(safe-area-inset-bottom))}
+.jump{top:calc(50px + env(safe-area-inset-top))}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{overflow-x:hidden}
+/* outer screen and Split View (narrow): one column at a time, swipe sideways */
+@media(max-width:560px){.cols{grid-template-columns:repeat(var(--n,6),calc(100% - 28px));scroll-snap-type:x mandatory}}
+/* inner screen portrait (~560-900 px): two line columns side by side, snap by column */
+@media(min-width:561px) and (max-width:900px){.cols{grid-template-columns:repeat(var(--n,6),calc(50% - 6px));scroll-snap-type:x mandatory}
+ .strip{grid-template-columns:1fr 1fr}.kps.rep{grid-template-columns:1fr 1fr}.tbw{grid-template-columns:1fr}}
+@media(max-width:560px){.kps.rep{grid-template-columns:1fr 1fr}.kps.rep .kp b{font-size:22px}.rtop{align-items:flex-start}.rtools{width:100%}.rtools select{flex:1}}
+@media(max-width:380px){.kps.rep{grid-template-columns:1fr}.top .day select{max-width:150px}.qs input,.qs input:focus{width:110px}}
+/* bigger touch targets on touch screens */
+@media(pointer:coarse){.sx{width:40px;height:40px}.sd input,.dn input{width:24px;height:24px}.lk{padding:6px 4px}.pill{padding:8px 14px}.seg button{padding:10px 16px}.tab{padding:10px 16px}}
+.rtabs{flex-wrap:nowrap;overflow-x:auto;max-width:100%;scrollbar-width:none}.rtabs::-webkit-scrollbar{display:none}.rtabs button{flex:none;white-space:nowrap}
+@media(pointer:coarse){.ctl select,.ctl input,.tools select,.tools input,.rtools select{min-height:40px}}
 </style>
 </head>
 <body>
@@ -1593,7 +1616,7 @@ function buildFullAll(date){
   var wrow=function(wk){var o=WK[wk],on=(date>=wk&&date<=addDays(wk,6));
     return '<tr'+(o.first?' class="wk" data-fday="'+(on?date:o.first)+'"':'')+(on?' style="outline:2px solid var(--gold);outline-offset:-2px"':'')+'><td class="ln" style="font-size:13px;text-align:left">'+pretty(wk).slice(0,5)+'</td>'+TRACKED.map(function(l){return wcell(o[l],1)}).join("")+wcell(o.all,nL)+'</tr>'};
   var whead='<tr><th>WEEK OF</th>'+TRACKED.map(function(l){return '<th>'+l+'</th>'}).join("")+'<th>ALL</th></tr>';
-  h+='<h3 class="gh">By week &nbsp;<select id="fsMetric" style="font-size:13px;padding:2px 4px"><option value="util"'+(FS.metric==="util"?" selected":"")+'>Capacity utilization %</option><option value="att"'+(FS.metric==="att"?" selected":"")+'>Made vs scheduled %</option></select></h3>';
+  h+='<h3 class="gh">By week &nbsp;<select id="fsMetric" style="font-size:14px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);min-height:40px"><option value="util"'+(FS.metric==="util"?" selected":"")+'>Capacity utilization %</option><option value="att"'+(FS.metric==="att"?" selected":"")+'>Made vs scheduled %</option></select></h3>';
   h+='<div class="sub" style="margin-bottom:6px">'+(FS.metric==="util"?'Utilization = scheduled run hours in the week &divide; ('+H+' h &times; 5 days) per line.':'Made vs scheduled = CASES MFG. &divide; CASES NEEDED on runs that have a CASES MFG. entry.')+' Tap a week to open its first day below.</div>';
   h+='<div class="card tw"><table class="ov wkt">'+whead+weeks.slice(0,12).map(wrow).join("")+'</table></div>';
   if(weeks.length>12)h+='<details style="margin-bottom:8px"><summary class="sub" style="cursor:pointer">Show the other '+(weeks.length-12)+' weeks</summary><div class="card tw"><table class="ov wkt">'+whead+weeks.slice(12).map(wrow).join("")+'</table></div></details>';
@@ -1861,7 +1884,7 @@ document.addEventListener("keydown",function(e){
   document.addEventListener("touchend",function(e){
     var t=e.changedTouches[0],dx=t.clientX-x0,dy=t.clientY-y0;
     if(Math.abs(dx)<80||Math.abs(dy)>45||Date.now()-t0>600||!tg||!tg.closest||!tg.closest("#main"))return;
-    if(tg.closest("input,select,textarea,.tw,.tlt,table,.gantt"))return;
+    if(tg.closest("input,select,textarea,.tw,.tlt,table,.gantt,.cols,.jump,.seg,.tabs,svg,.modal"))return;   // anything that scrolls sideways keeps its own swipe
     var dir=dx<0?1:-1,hn=tg.closest(".entry,.tlr")&&document.querySelector('[data-hnav="'+dir+'"]');
     if(hn){hn.click();return}
     var order=["Board","Schedule","Trends","Full schedule","Demand"],i=order.indexOf(tab)+dir;
