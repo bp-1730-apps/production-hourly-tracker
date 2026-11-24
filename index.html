@@ -310,6 +310,8 @@ table.pw td{font-size:11px;padding:4px 3px;min-width:44px}table.pw th{font-size:
 .bf select,.bf input:not([type=checkbox]){padding:8px 10px;border:1px solid rgba(255,255,255,.9);border-radius:10px;background:rgba(255,255,255,.75);font-size:14px;font-weight:400;color:var(--text)}.bf label.ck{flex-direction:row;align-items:center;gap:8px;font-size:13px;padding-top:18px}.bf .ck input{width:18px;height:18px}
 @media print{.rtools,.rtabs,.rh2 .pill,.rh2 .btn,[data-dmgall],.lk,details.hu{display:none!important}.main{margin:0}.card{box-shadow:none!important;background:#fff!important;border:1px solid #dde3ec!important;break-inside:avoid}.kps.rep{grid-template-columns:repeat(4,1fr)}.tbw{grid-template-columns:1fr 1fr}.tw{overflow:visible}svg{min-width:0!important}}
 .pwn{position:sticky;left:0;z-index:1;background:rgba(246,248,252,.97)!important}table.pw th:first-child{position:sticky;left:0;z-index:2}
+.src{font-size:11px;margin-top:3px;color:var(--muted)}.src.auto{color:#2f6fb0;font-weight:600}.src.man{color:#85580a;font-weight:600}
+.stat.l2l{color:#dfe7f1}
 </style>
 </head>
 <body>
@@ -323,7 +325,7 @@ table.pw td{font-size:11px;padding:4px 3px;min-width:44px}table.pw th{font-size:
 <div id="panel" hidden>
  <div class="row">
   <button class="btn pri" id="bLoad">Load schedule file...</button> <button class="btn" id="bShare">Send schedules to all devices</button><input type="file" id="file" accept=".xlsb,.xlsx,.xlsm" style="display:none">
-  <button class="btn pri" id="bInst" hidden>Install app</button> <button class="btn" id="bPull">Refresh L2L</button><label>ALSO USE L2L</label><input type="checkbox" id="useL2L"><span class="sub">fills hours nobody typed (off = typed counts only)</span><button class="btn" id="bUpc">Units per case</button>
+  <button class="btn pri" id="bInst" hidden>Install app</button> <button class="btn" id="bPull">Refresh L2L</button><input type="checkbox" id="useL2L" hidden><button class="btn" id="bUpc">Units per case</button>
   <label>VIEW</label><select id="view"><option value="auto">Auto</option><option value="1">1st shift</option><option value="2">2nd shift</option><option value="both">Both shifts</option></select>
   <label>YES AT</label><input type="number" id="thr" value="95" min="0" max="100"><span class="sub">% of expected</span>
   <label>CAPACITY</label><input type="number" id="cap" value="20" min="1" max="24"><span class="sub">hours per day, 5 days a week (Mon-Fri)</span>
@@ -450,7 +452,7 @@ function allRunsOf(line,date){return (((S.plans[date]||{})[line])||((REMOTE[date
 // runs with planned start/end times (older schedules have none: daily totals only)
 function runsSorted(line,date){var r=allRunsOf(line,date).filter(function(x){return x.s!=null});r.sort(function(a,b){return a.s-b.s});return r}
 function akey(d,l,h,r){return d+"|"+l+"|"+h+"|"+r}
-function effAct(d,l,h,r){var k=akey(d,l,h,r);if(k in S.acts)return S.acts[k];if(S.mrun&&(d+"|"+l+"|"+r) in S.mrun)return null;return (S.useL2L&&k in AUTO)?AUTO[k]:null}   // a manual run total replaces L2L for that product
+function effAct(d,l,h,r){var k=akey(d,l,h,r);if(k in S.acts)return S.acts[k];if(S.mrun&&(d+"|"+l+"|"+r) in S.mrun)return null;return (k in AUTO)?AUTO[k]:null}   // a manual run total replaces L2L for that product
 function madeOf(d,l,ri){var t=0;for(var h=0;h<NH;h++){var v=effAct(d,l,h,ri);if(v!=null)t+=v}return t}
 function doneOf(d,l,ri){var v=S.dones[d+"|"+l+"|"+ri];return v==null?null:v}
 function thr(){var v=parseFloat($("thr").value);return isNaN(v)?.95:Math.max(0,Math.min(1,v/100))}
@@ -521,14 +523,14 @@ function lineStatus(line,date,t){
   }
   var thru=Math.max(last,dn);
   if(thru<0)return {cls:"none",head:(live&&now<shift)?"Shift starts at "+clock(shift):"No hourly actuals yet",mt:"",info:info,nums:null};
-  var A=res.hours[thru].A,SS=res.hours[thru].S,expC=0,actC=0;
+  var tE=live?dn:thru,A=res.hours[thru].A,SS=tE>=0?res.hours[tE].S:res.hours[0].S.map(function(){return 0}),expC=0,actC=0;   // made = every count so far; due = finished hours only (a count posted mid-hour does not pull the whole hour in)
   for(ri=0;ri<runs.length;ri++){actC+=A[ri];expC+=res.dn[ri]!=null?A[ri]:Math.min(SS[ri],runs[ri].need)}
   var overdue=[];
   for(i=0;i<=thru;i++)if(res.hours[i].prods.some(function(q){return q.act==null&&q.exp>=0.5&&!q.done}))overdue.push(hr(res.hours[i].hs)+"-"+hr(res.hours[i].he));
   expC=rnd(expC);var diff=actC-expC,tol=(1-t)*expC;
-  var nums={act:actC,exp:expC,thru:hr(res.hours[thru].hs)+"-"+hr(res.hours[thru].he),exp_now:null,part:null,hour_exp:null,hour_label:""};
+  var nums={act:actC,exp:expC,thru:hr(res.hours[Math.max(0,tE)].hs)+"-"+hr(res.hours[Math.max(0,tE)].he),exp_now:null,part:null,hour_exp:null,hour_label:""};
   var raw=[],net,bn="",lastE=0;for(ri=0;ri<runs.length;ri++){var e1=res.dn[ri]!=null?A[ri]:Math.min(SS[ri],runs[ri].need);raw.push(runMin(runs[ri],e1-A[ri]));lastE=Math.max(lastE,pend(runs[ri]))}
-  net=applyBrk(raw,brkCredit(runs[0].s,Math.min(res.hours[thru].he,lastE)));bn=brkNote(raw,net);var tmin=net.reduce(function(a,b){return a+b},0);
+  net=applyBrk(raw,brkCredit(runs[0].s,Math.min(tE>=0?res.hours[tE].he:runs[0].s,lastE)));bn=brkNote(raw,net);var tmin=net.reduce(function(a,b){return a+b},0);
   var mins=rnd(Math.abs(tmin)),tm=mins>=60?Math.floor(mins/60)+" hr "+(mins%60)+" min":mins+" min",cls,head,mt;
   if(diff>=0){cls="ahead";head="AHEAD +"+fmt(rnd(diff))+" cases";mt=mins>=1?"about "+tm+" ahead":""}
   else if(-diff<=tol){cls="on";head="ON TARGET ("+fmt(rnd(diff))+" cases, within "+rnd((1-t)*100)+"%)";mt=""}
@@ -1235,7 +1237,7 @@ function sxHours(l,d,res,ri,t){
     var k=akey(d,l,h,ri),manual=k in S.acts,nk=d+"|"+l+"|"+h,cur=(function(){var n=nowRel(d);return n>=res.hours[h].hs&&n<res.hours[h].he})();
     rows+='<div class="sh'+(cur?' cur':'')+'"><div class="hh">'+hr(res.hours[h].hs)+'-'+hr(res.hours[h].he)+(cur?' <span class="nowp" style="display:inline-block">NOW</span>':'')+'</div>'+
       '<div class="sn"><small>PLANNED</small>'+(q.sch>=0.5?fmt(rnd(q.sch)):'&ndash;')+'</div><div class="sn"><small>OWED</small>'+(q.back>=0.5?fmt(rnd(q.back)):'&ndash;')+'</div><div class="sn"><small>EXPECTED</small><b>'+fmt(rnd(q.exp))+'</b></div>'+
-      '<div class="sn"><small>L2L (REF)</small>'+(k in AUTO?'<span class="l2lref">'+fmt(rnd(AUTO[k]))+'</span>'+(manual&&Math.round(AUTO[k])===Math.round(S.acts[k])?'':' <button class="lk" data-usel2l="'+k+'">use</button>'):'&ndash;')+'</div>'+
+      '<div class="sn"><small>L2L</small>'+(k in AUTO?'<span class="l2lref">'+fmt(rnd(AUTO[k]))+'</span>'+(manual&&Math.round(AUTO[k])===Math.round(S.acts[k])?'':' <button class="lk" data-usel2l="'+k+'">use</button>'):'&ndash;')+'</div>'+
       '<div class="si"><input class="act'+(manual?'':' auto')+'" inputmode="decimal" placeholder="actual" data-k="'+k+'" data-act="'+k+'" value="'+(q.act==null?"":rnd(q.act))+'"></div>'+
       '<div class="sno"><input class="note" placeholder="Note (downtime, jam...)" data-note="'+nk+'" value="'+esc(S.notes[nk]||"")+'"></div></div>';
   }
@@ -1243,7 +1245,7 @@ function sxHours(l,d,res,ri,t){
 }
 function buildSchedule(date){
   var h='<h2>Schedule &middot; '+pretty(date)+' <span class="sub" style="font-weight:400">'+dayname(date)+'</span></h2>';
-  h+='<div class="sub" style="margin-bottom:8px">Each column is a line. Type the total cases made so far for each product in the Made box. It replaces L2L for that product until you clear it. Tick Done when the run is finished. Tap a row\'s arrow for its hour-by-hour detail and notes.</div>';
+  h+='<div class="sub" style="margin-bottom:8px">Each column is a line. L2L fills the Made numbers automatically. If L2L is wrong, type the total in the Made box: it replaces L2L for that product until you clear it. Tick Done when the run is finished. Tap a row\'s arrow for its hour-by-hour detail and notes.</div>';
   var t=thr(),now=nowRel(date),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),pills='',blocks='',any=false;
   TRACKED.forEach(function(l){
     var all=allRunsOf(l,date);if(!all.length)return;any=true;
@@ -1254,8 +1256,8 @@ function buildSchedule(date){
         gm=res.runs.map(function(r,ri){return runMin(r,dueOf(ri)-last.A[ri])}),sm=applyBrk(gm,brkCredit(res.runs[0].s,Math.min(now,Math.max.apply(null,res.runs.map(pend)))));
     var T={need:0,due:0,made:0,min:0},nman=0,rows='',runmap=S.running[date+"|"+l]||{};
     res.runs.forEach(function(r,ri){
-      var hasM=mrKey(date,l,ri) in S.mrun,l2l=0,hasL=false;
-      for(var hh=0;hh<NH;hh++){var k=akey(date,l,hh,ri);if(k in AUTO){l2l+=AUTO[k];hasL=true}}
+      var hasM=mrKey(date,l,ri) in S.mrun,l2l=0,hasL=false,hasA=false;
+      for(var hh=0;hh<NH;hh++){var k=akey(date,l,hh,ri);if(k in AUTO){l2l+=AUTO[k];hasL=true}if(k in S.acts)hasA=true}
       var made=last.A[ri],due=dueOf(ri),diff=made-due,dh=doneOf(date,l,ri),started=due>0.5||made>0.5,pc=Math.min(100,100*made/Math.max(1,r.need)),open=SX[date+"|"+l+"|"+ri],cur=now>=r.s&&now<pend(r)&&now>=DAY0&&now<DAY0+NH*60,c=prodColor(r.item);
       T.need+=r.need;T.due+=due;T.made+=made;T.min+=sm[ri];if(hasM)nman++;
       var st=dh!=null?'<span class="res y">COMPLETED</span>'+(r.need-made>=0.5?'<div class="short">short '+fmt(rnd(r.need-made))+'</div>':''):(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'<b>on pace</b>':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')+'<div class="sub">'+fmtMin(diff>0?runMin(r,diff):sm[ri])+(diff>0?' ahead':' behind')+'</div>'));
@@ -1263,7 +1265,7 @@ function buildSchedule(date){
         '<div class="stm">'+clock(r.s)+' &ndash; '+clock(pend(r))+'<small>'+(runHrs(r)?runHrs(r).toFixed(1)+' h':'')+'</small></div>'+
         '<div class="sp"><span class="sw" style="background:'+c[1]+'"></span><b>'+esc(String(r.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,46))+(cur?' <span class="tg">on now</span>':'')+(runmap[ri]!=null?' <span class="tg">running</span>':'')+'<div class="cbar thin"><i style="width:'+pc.toFixed(0)+'%;background:'+(dh!=null?'#4caf78':'var(--accent)')+'"></i></div></div>'+
         '<div class="sn"><small>RUN CASES</small>'+fmt(rnd(r.need))+'</div><div class="sn"><small>DUE NOW</small>'+fmt(rnd(due))+'</div>'+
-        '<div class="si"><small>MADE (TYPE)</small><input class="mcin" inputmode="decimal" placeholder="'+(made>0.5?fmt(rnd(made)):'cases made')+'" data-mcl="'+l+'" data-mcrun="'+ri+'" value="'+(hasM?rnd(S.mrun[mrKey(date,l,ri)]):'')+'">'+(hasL&&!hasM?'<div class="l2lref">L2L '+fmt(rnd(l2l))+' <button class="lk" data-mcl="'+l+'" data-usel2lrun="'+ri+'">use</button></div>':'')+(hasM?'<div class="sub">'+Math.round(pc)+'% of run &middot; manual</div>':'')+'</div>'+
+        '<div class="si"><small>MADE (TYPE)</small><input class="mcin" inputmode="decimal" placeholder="'+(made>0.5?fmt(rnd(made)):'cases made')+'" data-mcl="'+l+'" data-mcrun="'+ri+'" value="'+(hasM?rnd(S.mrun[mrKey(date,l,ri)]):'')+'">'+(hasM?'<div class="src man">manual &middot; '+Math.round(pc)+'% of run</div>':hasA?'<div class="src man">typed by hour &middot; '+Math.round(pc)+'% of run</div>':hasL?'<div class="src auto">from L2L &middot; '+Math.round(pc)+'% of run &middot; type to override</div>':'<div class="src">no count yet</div>')+'</div>'+
         '<div class="sa">'+st+'</div>'+
         '<label class="sd"><input type="checkbox" data-mcl="'+l+'" data-mcdone="'+ri+'"'+(dh!=null?' checked':'')+'> Done</label>'+
         '<button class="sx'+(open?' on':'')+'" data-sx="'+date+'|'+l+'|'+ri+'" title="Hour by hour" aria-label="Hour by hour">&#9662;</button></div>'+
@@ -1276,7 +1278,7 @@ function buildSchedule(date){
   });
   if(!any)return h+'<div class="card note-card">No schedule for '+pretty(date)+'.</div>';
   var nc=(blocks.match(/class="card sl"/g)||[]).length;h+='<div class="jump"><span class="lab">LINES</span>'+pills+'</div><div class="cols" style="--n:'+nc+'">'+blocks+'</div>';
-  h+='<div class="sub" style="margin:8px 0">"Due now" counts only hours that have finished. A run total you type is spread over the hours that product was scheduled, so every view agrees with it. L2L numbers are a grey reference only. Time behind is net of break credit; a run ticked Done owes nothing.</div>';
+  h+='<div class="sub" style="margin:8px 0">"Due now" counts only hours that have finished. A run total you type is spread over the hours that product was scheduled, so every view agrees with it. L2L counts are used automatically wherever nothing was typed. Time behind is net of break credit; a run ticked Done owes nothing.</div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-mcclear="day">Clear manual counts, all lines this day</button><button class="btn" data-mcclear="all">Clear ALL manual counts</button></div>';
   return h;
 }
@@ -1309,13 +1311,13 @@ function statusLabel(){
   else if(l2lErr){cls="warn";txt="L2L "+hm(feedUpdated)+" (problem)"}
   else if(l2lAt){cls="ok";txt="L2L "+hm(feedUpdated)}
   else txt="L2L: no data yet";
-  p.className="stat l2l";p.lastChild.textContent=txt.replace(/^L2L/,"L2L ref");
+  p.className="stat l2l";p.lastChild.textContent=txt;
   var d=curDate(),t=[],miss=Object.keys(MISSING[d]||{});
   if(l2lErr)t.push([1,"Problem: "+l2lErr]);
   if(l2lSrc==="live")t.push([0,"L2L source: pulled live from L2L just now (Refresh L2L pulls again)."]);
   else if(l2lSrc==="file")t.push([0,"L2L source: the l2l.json file from GitHub (updated by the 5-minute job, which can run late)."+(SYNC.on&&l2lLiveErr?" Live pull not available: "+l2lLiveErr:"")]);
   if(schedErr&&!allDates().length)t.push([1,"Schedule: "+schedErr]);
-  t.push([0,S.useL2L?"Counts: typed numbers first, then L2L for hours nobody typed.":"Counts: only the numbers typed in the app are used. L2L is shown as a grey reference (turn on \"Also use L2L\" in this panel to fill empty hours with it)."]);
+  t.push([0,"Counts: L2L fills every product automatically. A number typed in the app (run total or hour) replaces L2L for that product until it is cleared."]);
   if(l2lAt&&!l2lErr)t.push([0,"L2L (reference) last changed "+hm(feedUpdated)+", checked "+chk+"."]);
   if(miss.length)t.push([0,"Units per case needed for: "+miss.sort().join(", ")+" (Settings > Units per case)"]);
   TRACKED.forEach(function(line){var st=STATS[d+"|"+line];if(st&&st.records){
