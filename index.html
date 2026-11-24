@@ -276,6 +276,20 @@ input,select{font-size:16px}
  .sh{grid-template-columns:1fr 1fr 1fr;gap:6px 10px}.sh .hh,.sh .si,.sh .sno{grid-column:1/4}.sh .sn{text-align:left}
  .slr{margin-left:0;width:100%}
 }
+
+/* ===== schedule: side-by-side line columns ===== */
+.jump{position:sticky;top:50px;z-index:4;display:flex;align-items:center;gap:8px;overflow-x:auto;padding:8px 12px;margin:0 0 10px;background:rgba(255,255,255,.78);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border:1px solid var(--gb);border-radius:999px;box-shadow:var(--sh);scrollbar-width:none}.jump::-webkit-scrollbar{display:none}
+.jump .lab{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.04em}.jump .chip{flex:none}
+.cols{display:grid;grid-template-columns:repeat(var(--n,6),minmax(236px,1fr));gap:12px;overflow-x:auto;align-items:start;padding-bottom:8px;scroll-snap-type:x proximity;scrollbar-width:thin}
+.cols .sl{margin:0;min-width:0;scroll-snap-align:start}
+@media(max-width:700px){.cols{grid-template-columns:repeat(var(--n,6),86vw);scroll-snap-type:x mandatory}}
+.cols .slh{padding:10px 12px;gap:6px 8px}.cols .sln{font-size:18px}.cols .slr{margin-left:0;width:100%;font-size:12px}
+.cols .sr{grid-template-columns:1fr 1fr;gap:6px 10px;padding:10px 12px;position:relative}
+.cols .sr>.stm{grid-column:1/3;padding-right:38px}.cols .sr>.sp{grid-column:1/3;font-size:13px}
+.cols .sr>.sx{position:absolute;top:8px;right:8px;width:30px;height:30px;grid-column:auto;grid-row:auto}
+.cols .sr>.sn{text-align:left}.cols .sr>.si{grid-column:1/3}.cols .sr>.sa{grid-column:1;text-align:left}.cols .sr>.sd{grid-column:2;justify-content:flex-end}
+.cols .shw{padding:6px 10px 10px}.cols .sh{grid-template-columns:1fr 1fr;gap:4px 8px}.cols .sh .hh,.cols .sh .si,.cols .sh .sno{grid-column:1/3}.cols .sh .sn{text-align:left}
+.cols .slf{flex-wrap:wrap;padding:8px 12px}
 </style>
 </head>
 <body>
@@ -1115,7 +1129,7 @@ function sxHours(l,d,res,ri,t){
 }
 function buildSchedule(date){
   var h='<h2>Schedule &middot; '+pretty(date)+' <span class="sub" style="font-weight:400">'+dayname(date)+'</span></h2>';
-  h+='<div class="sub" style="margin-bottom:8px">Type the total cases made so far for each product in the Made box. It replaces L2L for that product until you clear it. Tick Done when the run is finished. Tap a row\'s arrow for its hour-by-hour detail and notes.</div>';
+  h+='<div class="sub" style="margin-bottom:8px">Each column is a line. Type the total cases made so far for each product in the Made box. It replaces L2L for that product until you clear it. Tick Done when the run is finished. Tap a row\'s arrow for its hour-by-hour detail and notes.</div>';
   var t=thr(),now=nowRel(date),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),pills='',blocks='',any=false;
   TRACKED.forEach(function(l){
     var all=allRunsOf(l,date);if(!all.length)return;any=true;
@@ -1147,7 +1161,7 @@ function buildSchedule(date){
       '<div class="slf"><span class="sub">Time behind '+(Math.abs(tmn)<0.5?'0 min':fmtMin(tmn)+(tmn>0?'':' ahead'))+(tmn>0?bn:'')+'</span>'+(nman?'<button class="btn" data-mcl="'+l+'" data-mcclear="line">Clear manual counts</button>':'')+'</div></section>';
   });
   if(!any)return h+'<div class="card note-card">No schedule for '+pretty(date)+'.</div>';
-  h+='<div class="run" style="margin:0 0 10px"><span class="lab">JUMP TO</span>'+pills+'</div>'+blocks;
+  var nc=(blocks.match(/class="card sl"/g)||[]).length;h+='<div class="jump"><span class="lab">LINES</span>'+pills+'</div><div class="cols" style="--n:'+nc+'">'+blocks+'</div>';
   h+='<div class="sub" style="margin:8px 0">"Due now" counts only hours that have finished. A run total you type is spread over the hours that product was scheduled, so every view agrees with it. L2L numbers are a grey reference only. Time behind is net of break credit; a run ticked Done owes nothing.</div>';
   h+='<div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" data-mcclear="day">Clear manual counts, all lines this day</button><button class="btn" data-mcclear="all">Clear ALL manual counts</button></div>';
   return h;
@@ -1527,7 +1541,7 @@ document.addEventListener("click",function(e){
   if(t.dataset.mcl)MC.line=t.dataset.mcl;
   if(t.dataset.dmp){DM.pk=t.dataset.dmp;DM.sec="pd";render();window.scrollTo(0,0);return}
   if(t.dataset.sx){SX[t.dataset.sx]=!SX[t.dataset.sx];render();return}
-  if(t.dataset.sline){var se=document.getElementById("ln-"+t.dataset.sline);if(se){se.scrollIntoView({behavior:RM?"auto":"smooth",block:"start"});se.classList.remove("flash");void se.offsetWidth;se.classList.add("flash")}return}
+  if(t.dataset.sline){var se=document.getElementById("ln-"+t.dataset.sline);if(se){se.scrollIntoView({behavior:RM?"auto":"smooth",block:"nearest",inline:"start"});se.classList.remove("flash");void se.offsetWidth;se.classList.add("flash")}return}
   if(t.dataset.usel2l){var uk=t.dataset.usel2l;if(uk in AUTO){S.acts[uk]=Math.round(AUTO[uk]);syncPush("a",uk,S.acts[uk]);save();applyAll();render()}return}
   if(t.dataset.usel2lrun!=null){var ur=+t.dataset.usel2lrun,ud=curDate(),ut=0;for(var uh=0;uh<NH;uh++){var uk2=akey(ud,MC.line,uh,ur);if(uk2 in AUTO)ut+=AUTO[uk2]}mcSetRun(ud,MC.line,ur,String(Math.round(ut)));applyAll();render();return}
   if(t.dataset.mcline){MC.line=t.dataset.mcline;render();return}
