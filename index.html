@@ -559,14 +559,13 @@ function lineStatus(line,date,t){
   }
   var thru=Math.max(last,dn);
   if(thru<0)return {cls:"none",head:(live&&now<shift)?"Shift starts at "+clock(shift):"No hourly actuals yet",mt:"",info:info,nums:null};
-  var tE=live?dn:thru,A=res.hours[thru].A,SS=tE>=0?res.hours[tE].S:res.hours[0].S.map(function(){return 0}),expC=0,actC=0;   // made = every count so far; due = finished hours only (a count posted mid-hour does not pull the whole hour in)
+  var past=now>shift+NH*60+120,tE=live?dn:(past?NH-1:thru),A=res.hours[thru].A,SS=tE>=0?res.hours[tE].S:res.hours[0].S.map(function(){return 0}),expC=0,actC=0;   // made = every count so far; due = finished hours only (a count posted mid-hour does not pull the whole hour in)
   for(ri=0;ri<runs.length;ri++){actC+=A[ri];expC+=res.dn[ri]!=null?A[ri]:Math.min(SS[ri],runs[ri].need)}
   var overdue=[];
   for(i=0;i<=thru;i++)if(res.hours[i].prods.some(function(q){return q.act==null&&q.exp>=0.5&&!q.done}))overdue.push(hr(res.hours[i].hs)+"-"+hr(res.hours[i].he));
   expC=rnd(expC);var diff=actC-expC,tol=(1-t)*expC;
   var nums={act:actC,exp:expC,thru:hr(res.hours[Math.max(0,tE)].hs)+"-"+hr(res.hours[Math.max(0,tE)].he),exp_now:null,part:null,hour_exp:null,hour_label:""};
-  var raw=[],net,bn="",lastE=0;for(ri=0;ri<runs.length;ri++){var e1=res.dn[ri]!=null?A[ri]:Math.min(SS[ri],runs[ri].need);raw.push(runMin(runs[ri],e1-A[ri]));lastE=Math.max(lastE,pend(runs[ri]))}
-  net=applyBrk(raw,brkCredit(runs[0].s,Math.min(tE>=0?res.hours[tE].he:runs[0].s,lastE)));bn=brkNote(raw,net);var tmin=net.reduce(function(a,b){return a+b},0);
+  var bn="",tmin=lineDev(res,tE>=0?res.hours[tE].he:DAY0,past);
   var mins=rnd(Math.abs(tmin)),tm=mins>=60?Math.floor(mins/60)+" hr "+(mins%60)+" min":mins+" min",cls,head,mt;
   if(diff>=0){cls="ahead";head="AHEAD +"+fmt(rnd(diff))+" cases";mt=mins>=1?"about "+tm+" ahead":""}
   else if(-diff<=tol){cls="on";head="ON TARGET ("+fmt(rnd(diff))+" cases, within "+rnd((1-t)*100)+"%)";mt=""}
@@ -1297,8 +1296,8 @@ function buildSchedule(date){
       var hasM=mrKey(date,l,ri) in S.mrun,l2l=0,hasL=false,hasA=false;
       for(var hh=0;hh<NH;hh++){var k=akey(date,l,hh,ri);if(k in AUTO){l2l+=AUTO[k];hasL=true}if(k in S.acts)hasA=true}
       var made=last.A[ri],due=dueOf(ri),diff=made-due,dh=doneOf(date,l,ri),started=due>0.5||made>0.5,pc=Math.min(100,100*made/Math.max(1,r.need)),open=SX[date+"|"+l+"|"+ri],cur=now>=r.s&&now<pend(r)&&now>=DAY0&&now<DAY0+NH*60,c=prodColor(r.item);
-      T.need+=r.need;T.due+=due;T.made+=made;T.min+=sm[ri];if(hasM)nman++;
-      var st=dh!=null?'<span class="res y">COMPLETED</span>'+(r.need-made>=0.5?'<div class="short">short '+fmt(rnd(r.need-made))+'</div>':''):(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'<b>on pace</b>':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')+'<div class="sub">'+fmtMin(diff>0?runMin(r,diff):sm[ri])+(diff>0?' ahead':' behind')+'</div>'));
+      T.need+=r.need;T.due+=due;T.made+=made;if(hasM)nman++;
+      var st=dh!=null?'<span class="res y">COMPLETED</span>'+(r.need-made>=0.5?'<div class="short">short '+fmt(rnd(r.need-made))+'</div>':''):(!started?'<span class="sub">not started</span>':(Math.abs(diff)<0.5?'<b>on pace</b>':(diff>0?'<b style="color:var(--okfg)">'+fmt(rnd(diff))+' ahead</b>':'<b style="color:var(--badfg)">'+fmt(rnd(-diff))+' behind</b>')+'<div class="sub">'+fmtMin(diff>0?runMin(r,diff):sm[ri])+' of run time '+(diff>0?'ahead':'behind')+'</div>'));
       rows+='<div class="sr'+(cur?' cur':'')+(dh!=null?' fin':'')+(hasM?' ov-on':'')+'" id="run-'+l+'-'+ri+'">'+
         '<div class="stm">'+clock(r.s)+' &ndash; '+clock(pend(r))+'<small>'+(runHrs(r)?runHrs(r).toFixed(1)+' h':'')+(r.ps!=null?' &middot; <span class="shifted">planned '+clock(r.ps)+' ('+(r.s>r.ps?'+':'-')+fmtMin(r.s-r.ps)+')</span>':'')+'</small></div>'+
         '<div class="sp"><span class="sw" style="background:'+c[1]+'"></span><b>'+esc(String(r.item).slice(-6))+'</b> '+esc((r.name||"").slice(0,46))+(cur?' <span class="tg">on now</span>':'')+(runmap[ri]!=null?' <span class="tg">running</span>':'')+'<div class="cbar thin"><i style="width:'+pc.toFixed(0)+'%;background:'+(dh!=null?'#4caf78':'var(--accent)')+'"></i></div></div>'+
@@ -1309,11 +1308,11 @@ function buildSchedule(date){
         '<button class="sx'+(open?' on':'')+'" data-sx="'+date+'|'+l+'|'+ri+'" title="Hour by hour" aria-label="Hour by hour">&#9662;</button></div>'+
         (open?sxHours(l,date,res,ri,t):'');
     });
-    var td=T.made-T.due,tmn=T.min,bn=brkNote(gm,sm);
+    var td=T.made-T.due,tmn=lineDev(res,DAY0+60*(idx+1),now>DAY0+NH*60+120),bn="";
     pills+='<button class="chip" data-sline="'+l+'" style="background:'+col[0]+';border-color:'+col[1]+'"><b>'+l+'</b><span style="color:'+col[1]+'">'+(ls.cls==="none"?'no counts':ls.cls==="ahead"?'ahead':ls.cls==="on"?'on target':'behind'+(tmn>=1?' '+fmtMin(tmn):''))+'</span></button>';
     blocks+='<section class="card sl" id="ln-'+l+'"><div class="slh"><b class="sln">'+l+'</b><span class="pl" style="background:'+col[0]+';color:'+col[1]+'">'+esc(ls.head)+'</span><span class="sub">'+esc(ls.mt)+'</span><span class="slr">made <b>'+fmt(rnd(T.made))+'</b> of <b>'+fmt(rnd(T.due))+'</b> due now &middot; '+fmt(rnd(T.need))+' for the day'+(nman?' &middot; '+nman+' manual':'')+'</span>'+
       '<div class="shl"><label>Line started <input type="time" step="60" data-shl="'+l+'" data-shri="0" value="'+hhmm(res.runs[0].s)+'"></label>'+(S.off[date+'|'+l]?'<span class="tg">schedule shifted</span><button class="lk" data-shreset="'+l+'|all">back to plan</button>':'<span class="sub">planned '+clock(res.runs[0].s)+'</span>')+'</div></div>'+rows+
-      '<div class="slf"><span class="sub">Time behind '+(Math.abs(tmn)<0.5?'0 min':fmtMin(tmn)+(tmn>0?'':' ahead'))+(tmn>0?bn:'')+'</span>'+(nman?'<button class="btn" data-mcl="'+l+'" data-mcclear="line">Clear manual counts</button>':'')+'</div></section>';
+      '<div class="slf"><span class="sub">Behind schedule on the clock, changeovers included: '+(Math.abs(tmn)<0.5?'0 min':fmtMin(tmn)+(tmn>0?'':' ahead'))+(tmn>0?bn:'')+'</span>'+(nman?'<button class="btn" data-mcl="'+l+'" data-mcclear="line">Clear manual counts</button>':'')+'</div></section>';
   });
   if(!any)return h+'<div class="card note-card">No schedule for '+pretty(date)+'.</div>';
   var nc=(blocks.match(/class="card sl"/g)||[]).length;h+='<div class="jump"><span class="lab">LINES</span>'+pills+'</div><div class="cols" style="--n:'+nc+'">'+blocks+'</div>';
@@ -1513,6 +1512,24 @@ function brkCredit(start,cut){return 0}
 // credit only reduces the minutes behind (positive entries); minutes ahead are left alone
 function applyBrk(mins,credit){var P=0;mins.forEach(function(x){if(x>0)P+=x});var f=P>0?Math.max(0,(P-credit)/P):1;return mins.map(function(x){return x>0?x*f:x})}
 function brkNote(raw,net){var g=0,n=0;raw.forEach(function(x){if(x>0)g+=x});net.forEach(function(x){if(x>0)n+=x});return g-n>=1?" (after "+Math.round(g-n)+" min break credit)":""}
+
+// Line time behind/ahead = clock time between now and the moment the PLAN reached the cases actually made.
+// The plan curve P(t) adds each run's cases linearly over its own window (start to planned end) and stays flat
+// in the gaps between runs, so scheduled changeovers count: a line still finishing a late run also pushes its
+// next changeover and run back. A run ticked Done is closed at the start of the hour it was ticked (matching "due now"), with its
+// cases set to what was made. Positive = behind, negative = ahead.
+function lineDev(res,cut,over){   // over = the plan day is finished: stop the clock at the last planned end
+  var runs=res.runs,A=res.hours[NH-1].A,parts=[],made=0,lo=Infinity,hi=-Infinity;
+  runs.forEach(function(r,i){var s=r.s,e=pend(r),nd=r.need;
+    if(res.dn[i]!=null){nd=A[i];e=Math.min(e,DAY0+60*res.dn[i]);if(e<=s)e=s+1e-6}
+    parts.push([s,Math.max(s+1e-6,e),nd]);made+=A[i];lo=Math.min(lo,s);hi=Math.max(hi,e)});
+  if(!parts.length)return 0;
+  if(over)cut=Math.min(cut,hi);
+  var P=function(t){var p=0;parts.forEach(function(x){p+=x[2]*Math.max(0,Math.min(1,(t-x[0])/(x[1]-x[0])))});return p},pc=P(cut),a,b,k,m;
+  if(pc>made+0.5){a=Math.min(lo,cut);b=cut;for(k=0;k<60;k++){m=(a+b)/2;if(P(m)<=made)a=m;else b=m}return cut-a}
+  if(made>pc+0.5){a=cut;b=Math.max(hi,cut);if(P(b)<made)return -(b-cut);for(k=0;k<60;k++){m=(a+b)/2;if(P(m)>=made)b=m;else a=m}return -(b-cut)}
+  return 0;
+}
 function runMin(r,cases){return r.need>0?cases*runHrs(r)/r.need*60:0}      // minutes of line time that many cases represent
 function fsToday(){
   var d=opDay(),now=nowRel(d),idx=Math.min(NH-1,Math.floor((now-DAY0)/60)-1),P={},LM={},any=false,BRK=0;
@@ -1522,14 +1539,14 @@ function fsToday(){
     var dueOf=function(ri){return res.dn[ri]!=null?last.A[ri]:(idx>=0?res.hours[idx].S[ri]:0)},   // a run marked complete is closed: nothing is owed on it
     gm=res.runs.map(function(r,ri){return runMin(r,dueOf(ri)-last.A[ri])}),sm=applyBrk(gm,brkCredit(res.runs[0].s,Math.min(now,Math.max.apply(null,res.runs.map(pend)))));BRK=BRK+(brkNote(gm,sm)?gm.reduce(function(a,x){return a+(x>0?x:0)},0)-sm.reduce(function(a,x){return a+(x>0?x:0)},0):0);
     res.runs.forEach(function(r,ri){var k=k6(r.item)||r.item,p=P[k]=P[k]||{name:r.name,day:0,made:0,now:0,min:0,lines:{}},due=dueOf(ri),mn=sm[ri];
-      p.day+=r.need;p.made+=last.A[ri];p.now+=due;p.min+=mn;LM[l]=(LM[l]||0)+mn;p.lines[l]=1})});
+      p.day+=r.need;p.made+=last.A[ri];p.now+=due;p.min+=mn;p.lines[l]=1});LM[l]=lineDev(res,DAY0+60*(idx+1))});
   var h='';
   if(!any)return {any:false,h:'<div class="card note-card">Nothing is scheduled with times for today ('+pretty(d)+'), so there is no live compliance. Use This week or Last 4 weeks for finished days.</div>'};
   var ks=Object.keys(P),T={day:0,made:0,now:0};ks.forEach(function(k){T.day+=P[k].day;T.made+=P[k].made;T.now+=P[k].now});
   ks.sort(function(a,b){return (P[b].now-P[b].made)-(P[a].now-P[a].made)});
   var col=function(p){return p>=95?"#4caf78":p>=85?"#e8b93c":"#d9665a"};
   var pace=T.now>0?100*T.made/T.now:null;
-  h+='<div class="card" style="padding:12px 16px;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:26px">'+(pace==null?'&ndash;':pace.toFixed(0)+'%')+'</b><span>of what should be made by now ('+fmt(rnd(T.made))+' of '+fmt(rnd(T.now))+' cases)</span></div>'+(pace!=null?'<div class="cbar" style="margin-top:8px"><i style="width:'+Math.min(100,pace)+'%;background:'+col(pace)+'"></i></div>':'')+'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+Object.keys(LM).map(function(l){var m=LM[l];return '<span class="tg" style="font-size:13px;padding:4px 12px;'+(m>0.5?'background:#fadcd8;color:#8a2a20':'background:#e2f4e6;color:#1b5e32')+'"><b>'+l+'</b> '+(Math.abs(m)<0.5?'on pace':fmtMin(m)+(m>0?' behind':' ahead'))+'</span>'}).join("")+'</div><div class="sub" style="margin-top:6px">Time behind = the cases behind divided by that product\'s run rate. Whole day: '+fmt(rnd(T.made))+' of '+fmt(rnd(T.day))+' scheduled ('+(T.day>0?(100*T.made/T.day).toFixed(0):0)+'%). "By now" counts completed hours only, as of '+clock(now)+'.</div></div>';
+  h+='<div class="card" style="padding:12px 16px;margin-bottom:10px"><div style="display:flex;align-items:baseline;gap:12px;flex-wrap:wrap"><b style="font-size:26px">'+(pace==null?'&ndash;':pace.toFixed(0)+'%')+'</b><span>of what should be made by now ('+fmt(rnd(T.made))+' of '+fmt(rnd(T.now))+' cases)</span></div>'+(pace!=null?'<div class="cbar" style="margin-top:8px"><i style="width:'+Math.min(100,pace)+'%;background:'+col(pace)+'"></i></div>':'')+'<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">'+Object.keys(LM).map(function(l){var m=LM[l];return '<span class="tg" style="font-size:13px;padding:4px 12px;'+(m>0.5?'background:#fadcd8;color:#8a2a20':'background:#e2f4e6;color:#1b5e32')+'"><b>'+l+'</b> '+(Math.abs(m)<0.5?'on pace':fmtMin(m)+(m>0?' behind':' ahead'))+'</span>'}).join("")+'</div><div class="sub" style="margin-top:6px">Line chips = time behind schedule on the clock: how far back in the plan the cases made would put you, counting the scheduled changeover gaps between runs. Product column = that product\'s own run time (cases behind / its run rate), so the products do not add up to the line. Whole day: '+fmt(rnd(T.made))+' of '+fmt(rnd(T.day))+' scheduled ('+(T.day>0?(100*T.made/T.day).toFixed(0):0)+'%). "By now" counts completed hours only, as of '+clock(now)+'.</div></div>';
   var rows=ks.map(function(k){var p=P[k],pc=p.now>0?100*p.made/p.now:null,sh=p.now-p.made;
     return '<tr><td><b>'+esc(p.name.slice(0,48))+'</b><div class="sub">'+esc(k)+' &middot; '+Object.keys(p.lines).join(", ")+'</div></td><td style="min-width:160px">'+(pc==null?'<span class="sub">not started</span>':'<div class="cbar"><i style="width:'+Math.min(100,pc)+'%;background:'+col(pc)+'"></i></div>')+'</td><td class="r"><b>'+(pc==null?'&ndash;':pc.toFixed(0)+'%')+'</b></td><td class="r">'+fmt(rnd(p.made))+' of '+fmt(rnd(p.now))+'</td><td class="r">'+fmt(rnd(p.day))+'</td><td class="r" style="color:'+(sh>0.5?'var(--badfg)':'var(--okfg)')+'">'+(p.now<=0?'':(sh>0.5?'-'+fmt(rnd(sh)):'+'+fmt(rnd(-sh))))+'</td><td class="r" style="font-weight:700;color:'+(p.min>0.5?'var(--badfg)':'var(--okfg)')+'">'+(p.now<=0?'':(Math.abs(p.min)<0.5?'on pace':fmtMin(p.min)+(p.min>0?'':' ahead')))+'</td></tr>'}).join("");
   h+='<div class="sub" style="margin-bottom:6px">Biggest gaps first. Green 95%+, amber 85-95%, red under 85%. Counts come from L2L and anything typed on the Manual counts tab.</div><div class="card fs tw"><table><tr><th>PRODUCT</th><th></th><th class="r">ON PACE</th><th class="r">MADE OF DUE BY NOW</th><th class="r">DAY TOTAL</th><th class="r">CASES BEHIND</th><th class="r">TIME BEHIND</th></tr>'+rows+'</table></div>';
@@ -1904,7 +1921,7 @@ if("serviceWorker" in navigator&&/^https?:$/.test(location.protocol)){window.add
 load();$("cap").value=S.capH||20;$("useL2L").checked=!!S.useL2L;TR.to=opDay();TR.from=TR.to.slice(0,4)+"-01-01";fillDates();applyAll();render();
 setTimeout(syncInit,300);setTimeout(pullAll,400);setTimeout(function(){var y=opDay();var f=TR.from,t=TR.to;TR.from=y.slice(0,4)+"-01-01";TR.to=y;loadHistory(true).then(function(){TR.from=f;TR.to=t})},1500);setInterval(pullAll,120000);
 setInterval(function(){var a=document.activeElement;if(!(a&&(a.tagName==="INPUT"||a.tagName==="TEXTAREA"))&&!$("modal").innerHTML)render()},30000);
-window.__T={mcSetRun:mcSetRun,mcClear:mcClear,runMin:runMin,S:S,TR:TR,REMOTE:REMOTE,loadHistory:loadHistory,dailyData:dailyData,getAuto:function(){return AUTO},engine:engine,lineStatus:lineStatus,effHour:effHour,effTotal:effTotal,parseSchedule:parseSchedule,readRows:readRows,applyAll:applyAll,fillDates:fillDates,render:render,pullAll:pullAll,STATS:STATS,setView:function(v){view=v;render()},setTab:function(t){tab=t;render()}};
+window.__T={lineDev:lineDev,mcSetRun:mcSetRun,mcClear:mcClear,runMin:runMin,S:S,TR:TR,REMOTE:REMOTE,loadHistory:loadHistory,dailyData:dailyData,getAuto:function(){return AUTO},engine:engine,lineStatus:lineStatus,effHour:effHour,effTotal:effTotal,parseSchedule:parseSchedule,readRows:readRows,applyAll:applyAll,fillDates:fillDates,render:render,pullAll:pullAll,STATS:STATS,setView:function(v){view=v;render()},setTab:function(t){tab=t;render()}};
 })();
 
 </script>
